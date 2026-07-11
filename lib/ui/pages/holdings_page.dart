@@ -1,9 +1,8 @@
 // 持倉分頁：個股列表（可展開明細）與已清倉區塊。
 
 import 'dart:convert';
-import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/holding_position.dart';
@@ -106,18 +105,16 @@ class HoldingsPage extends StatelessWidget {
       BuildContext context, DashboardController controller) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     try {
-      final FilePickerResult? result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: <String>['csv'],
-        withData: true,
+      final XFile? file = await openFile(
+        acceptedTypeGroups: <XTypeGroup>[
+          const XTypeGroup(label: 'CSV', extensions: <String>['csv']),
+        ],
       );
-      if (result == null || result.files.isEmpty) {
+      if (file == null) {
         return; // 使用者取消
       }
-      final PlatformFile file = result.files.first;
-      final String csv_content = file.bytes != null
-          ? utf8.decode(file.bytes!, allowMalformed: true)
-          : await File(file.path!).readAsString();
+      final String csv_content =
+          utf8.decode(await file.readAsBytes(), allowMalformed: true);
 
       final ImportSummary summary =
           await controller.ImportCsvContent(csv_content);

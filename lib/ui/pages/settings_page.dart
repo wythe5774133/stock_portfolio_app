@@ -2,11 +2,13 @@
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../services/backup_service.dart';
 import '../dashboard_controller.dart';
@@ -182,22 +184,42 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  /// 匯出備份：產生 JSON 後開存檔對話框。
+  /*
+   *  @fn      Future<void> ExportBackup(BuildContext context)
+   *
+   *  @brief   ( 匯出備份：桌面開存檔對話框；手機開分享面板（可存到檔案/AirDrop） )
+   */
   Future<void> ExportBackup(BuildContext context) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     try {
       final String backup_json = await controller.ExportBackupJson();
       final String file_name = 'stock_portfolio_backup_'
           '${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.json';
-      final String? saved_path = await FilePicker.saveFile(
-        fileName: file_name,
-        type: FileType.custom,
-        allowedExtensions: <String>['json'],
-        bytes: Uint8List.fromList(utf8.encode(backup_json)),
-      );
-      if (saved_path != null) {
-        messenger.showSnackBar(const SnackBar(content: Text('備份已匯出')));
+
+      if (Platform.isIOS || Platform.isAndroid) {
+        // 手機：寫入暫存檔後開系統分享面板（存到檔案、AirDrop、雲端皆可）
+        final Directory temp_dir = await getTemporaryDirectory();
+        final File temp_file = File(p.join(temp_dir.path, file_name));
+        await temp_file.writeAsString(backup_json);
+        await SharePlus.instance.share(ShareParams(
+          files: <XFile>[XFile(temp_file.path)],
+          subject: '股票庫存備份',
+        ));
+        return;
       }
+
+      // 桌面：存檔對話框
+      final FileSaveLocation? location = await getSaveLocation(
+        suggestedName: file_name,
+        acceptedTypeGroups: <XTypeGroup>[
+          const XTypeGroup(label: 'JSON', extensions: <String>['json']),
+        ],
+      );
+      if (location == null) {
+        return; // 使用者取消
+      }
+      await File(location.path).writeAsString(backup_json);
+      messenger.showSnackBar(const SnackBar(content: Text('備份已匯出')));
     } catch (error) {
       messenger.showSnackBar(SnackBar(
         content: Text('匯出失敗：$error'),
@@ -210,18 +232,15 @@ class SettingsPage extends StatelessWidget {
   Future<void> ImportBackup(BuildContext context) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     try {
-      final FilePickerResult? result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: <String>['json'],
-        withData: true,
+      final XFile? file = await openFile(
+        acceptedTypeGroups: <XTypeGroup>[
+          const XTypeGroup(label: 'JSON', extensions: <String>['json']),
+        ],
       );
-      if (result == null || result.files.isEmpty) {
+      if (file == null) {
         return; // 使用者取消
       }
-      final PlatformFile file = result.files.first;
-      final String backup_json = file.bytes != null
-          ? utf8.decode(file.bytes!)
-          : await File(file.path!).readAsString();
+      final String backup_json = utf8.decode(await file.readAsBytes());
 
       final BackupRestoreSummary summary =
           await controller.ImportBackupJson(backup_json);

@@ -7,6 +7,7 @@ name: release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch: {} # 手動觸發＝測試建置（不上傳 Release）
 
 permissions:
   contents: write
@@ -26,7 +27,8 @@ jobs:
         run: |
           cd build/macos/Build/Products/Release
           ditto -c -k --keepParent stock_portfolio_app.app StockPortfolio-macOS-${{ github.ref_name }}.zip
-      - uses: softprops/action-gh-release@v2
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
           files: build/macos/Build/Products/Release/StockPortfolio-macOS-${{ github.ref_name }}.zip
 
@@ -44,7 +46,8 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath StockPortfolio-Windows-${{ github.ref_name }}.zip
-      - uses: softprops/action-gh-release@v2
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
           files: StockPortfolio-Windows-${{ github.ref_name }}.zip
 
@@ -66,7 +69,8 @@ jobs:
         run: |
           cd build/linux/x64/release
           tar -czf StockPortfolio-Linux-${{ github.ref_name }}.tar.gz bundle
-      - uses: softprops/action-gh-release@v2
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
           files: build/linux/x64/release/StockPortfolio-Linux-${{ github.ref_name }}.tar.gz
 
@@ -87,6 +91,11 @@ jobs:
       - name: Rename APK
         run: |
           mv build/app/outputs/flutter-apk/app-release.apk StockPortfolio-Android-${{ github.ref_name }}.apk
-      - uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: StockPortfolio-Android-*.apk
+      - if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
         with:
           files: StockPortfolio-Android-${{ github.ref_name }}.apk
