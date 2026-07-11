@@ -85,6 +85,8 @@ class WatchlistSymbols extends Table {
   TextColumn get symbol => text()();
   TextColumn get name => text()(); // 公司/基金名稱（加入時的搜尋結果）
   IntColumn get added_at => integer()(); // 加入時間 epoch 毫秒
+  TextColumn get group_name =>
+      text().withDefault(const Constant('自選'))(); // 使用者自訂分類
 
   @override
   Set<Column> get primaryKey => <Column>{symbol};
@@ -120,7 +122,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.Memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -133,6 +135,10 @@ class AppDatabase extends _$AppDatabase {
           // v2 → v3：新增追蹤清單表
           if (from < 3) {
             await m.createTable(watchlistSymbols);
+          }
+          // v3 → v4：追蹤清單加入分類欄位
+          if (from >= 3 && from < 4) {
+            await m.addColumn(watchlistSymbols, watchlistSymbols.group_name);
           }
         },
       );

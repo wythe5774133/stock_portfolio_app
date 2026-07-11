@@ -118,9 +118,16 @@ class PortfolioRepository {
   }
 
   /// 加入自選追蹤；回傳 true 表示實際新增（false = 已在清單中）。
-  Future<bool> AddToWatchlist(String symbol, String name) {
+  Future<bool> AddToWatchlist(String symbol, String name,
+      {String group_name = '自選'}) {
     return database.watchlistDao.AddSymbol(
-        symbol, name, DateTime.now().millisecondsSinceEpoch);
+        symbol, name, DateTime.now().millisecondsSinceEpoch,
+        group_name: group_name);
+  }
+
+  /// 更改追蹤股的分類。
+  Future<void> UpdateWatchlistGroup(String symbol, String group_name) {
+    return database.watchlistDao.UpdateSymbolGroup(symbol, group_name);
   }
 
   /// 移除自選追蹤。
@@ -128,10 +135,12 @@ class PortfolioRepository {
     return database.watchlistDao.RemoveSymbol(symbol);
   }
 
-  /// 抓取個股詳情頁的 K 線資料（日/週/月）；失敗回傳 null。
+  /// 抓取個股詳情頁的 K 線資料（日/週/月＋時間範圍）；失敗回傳 null。
   Future<List<OhlcvCandle>?> FetchOhlcvCandles(
-      String symbol, CandleInterval interval) {
-    return historical_price_service.FetchOhlcvCandles(symbol, interval);
+      String symbol, CandleInterval interval,
+      {CandleRange? range}) {
+    return historical_price_service.FetchOhlcvCandles(symbol, interval,
+        range: range);
   }
 
   /*
@@ -184,6 +193,11 @@ class PortfolioRepository {
    */
   Future<bool> AddManualTransaction(StockTransaction transaction) {
     return database.transactionDao.InsertIgnoreTransaction(transaction);
+  }
+
+  /// 刪除單筆交易（依資料庫主鍵）。
+  Future<bool> DeleteTransaction(int transaction_id) {
+    return database.transactionDao.DeleteTransactionById(transaction_id);
   }
 
   /// 以關鍵字搜尋股票代號（手動記帳的自動完成）。

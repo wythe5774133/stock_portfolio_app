@@ -56,8 +56,10 @@ class StockDetailPage extends StatefulWidget {
 class _StockDetailPageState extends State<StockDetailPage> {
   StockQuote? detail_quote; // 含 52 週/市值/本益比的完整報價
   CandleInterval selected_interval = CandleInterval.daily;
-  final Map<CandleInterval, List<OhlcvCandle>> candles_by_interval =
-      <CandleInterval, List<OhlcvCandle>>{};
+  CandleRange selected_range =
+      GetDefaultRangeForInterval(CandleInterval.daily);
+  final Map<String, List<OhlcvCandle>> candle_cache =
+      <String, List<OhlcvCandle>>{};
   bool is_chart_loading = true;
   bool is_chart_unavailable = false;
 
@@ -65,7 +67,12 @@ class _StockDetailPageState extends State<StockDetailPage> {
   void initState() {
     super.initState();
     LoadDetailQuote();
-    LoadCandles(selected_interval);
+    LoadCandles(selected_interval, selected_range);
+  }
+
+  /// 快取鍵：時間單位＋範圍。
+  String _BuildCacheKey(CandleInterval interval, CandleRange range) {
+    return '${interval.name}-${range.name}';
   }
 
   /// 抓取完整報價（52 週高低、市值、本益比等延伸欄位）。
@@ -78,22 +85,25 @@ class _StockDetailPageState extends State<StockDetailPage> {
     setState(() => detail_quote = quote);
   }
 
-  /// 抓取指定週期的 K 線（頁內快取，切回不重抓）。
-  Future<void> LoadCandles(CandleInterval interval) async {
-    if (candles_by_interval.containsKey(interval)) {
+  /// 抓取指定週期＋範圍的 K 線（頁內快取，切回不重抓）。
+  Future<void> LoadCandles(CandleInterval interval, CandleRange range) async {
+    final String cache_key = _BuildCacheKey(interval, range);
+    if (candle_cache.containsKey(cache_key)) {
       setState(() {
         selected_interval = interval;
+        selected_range = range;
         is_chart_unavailable = false;
       });
       return;
     }
     setState(() {
       selected_interval = interval;
+      selected_range = range;
       is_chart_loading = true;
       is_chart_unavailable = false;
     });
     final List<OhlcvCandle>? candles = await widget.controller.repository
-        .FetchOhlcvCandles(widget.symbol, interval);
+        .FetchOhlcvCandles(widget.symbol, interval, range: range);
     if (!mounted) {
       return;
     }
@@ -102,7 +112,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
       if (candles == null || candles.isEmpty) {
         is_chart_unavailable = true;
       } else {
-        candles_by_interval[interval] = candles;
+        candle_cache[cache_key] = candles;
       }
     });
   }
@@ -120,7 +130,8 @@ class _StockDetailPageState extends State<StockDetailPage> {
   @override
   Widget build(BuildContext context) {
     final AppColors colors = AppColors.Of(context);
-    final List<OhlcvCandle>? candles = candles_by_interval[selected_interval];
+    final List<OhlcvCandle>? candles =
+        candle_cache[_BuildCacheKey(selected_interval, selected_range)];
 
     return Scaffold(
       appBar: AppBar(
@@ -205,8 +216,11 @@ class _StockDetailPageState extends State<StockDetailPage> {
         ? widget.controller.profit_colors.ResolveColorForValue(change)
         : colors.text_secondary;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
+    // Wrap 排版：窄螢幕（手機）時漲跌與時段自動換行，不會擠出畫面外
+    return Wrap(
+      spacing: 12,
+      runSpacing: 2,
+      crossAxisAlignment: WrapCrossAlignment.end,
       children: <Widget>[
         Text(
           price != null ? '\$${price.toStringAsFixed(2)}' : '—',
@@ -217,7 +231,6 @@ class _StockDetailPageState extends State<StockDetailPage> {
             color: colors.text_primary,
           ),
         ),
-        const SizedBox(width: 12),
         if (change != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 5),
@@ -231,34 +244,62 @@ class _StockDetailPageState extends State<StockDetailPage> {
               ),
             ),
           ),
-        const Spacer(),
-        Text(
-          '${price_and_label.$2}價・'
-          '${FormatMarketSession_Zh(widget.controller.current_session)}',
-          style: TextStyle(fontSize: 12.5, color: colors.text_muted),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            '${price_and_label.$2}價・'
+            '${FormatMarketSession_Zh(widget.controller.current_session)}',
+            style: TextStyle(fontSize: 12.5, color: colors.text_muted),
+          ),
         ),
       ],
     );
   }
 
-  /// 日K/週K/月K 切換。
+  /// 日K/週K/月K 與時間範圍切換。
   Widget _BuildIntervalSelector() {
-    return Wrap(
-      spacing: 6,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        for (final CandleInterval interval in CandleInterval.values)
-          ChoiceChip(
-            label: Text(FormatCandleInterval(interval),
-                style: const TextStyle(fontSize: 12.5)),
-            selected: selected_interval == interval,
-            showCheckmark: false,
-            visualDensity: VisualDensity.compact,
-            onSelected: (bool selected) {
-              if (selected) {
-                LoadCandles(interval);
-              }
-            },
-          ),
+        Wrap(
+          spacing: 6,
+          children: <Widget>[
+            for (final CandleInterval interval in CandleInterval.values)
+              ChoiceChip(
+                label: Text(FormatCandleInterval(interval),
+                    style: const TextStyle(fontSize: 12.5)),
+                selected: selected_interval == interval,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (bool selected) {
+                  if (selected) {
+                    LoadCandles(
+                        interval, GetDefaultRangeForInterval(interval));
+                  }
+                },
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 6,
+          children: <Widget>[
+            for (final CandleRange range
+                in GetRangesForInterval(selected_interval))
+              ChoiceChip(
+                label: Text(range.label,
+                    style: const TextStyle(fontSize: 11.5)),
+                selected: selected_range == range,
+                showCheckmark: false,
+                visualDensity: VisualDensity.compact,
+                onSelected: (bool selected) {
+                  if (selected) {
+                    LoadCandles(selected_interval, range);
+                  }
+                },
+              ),
+          ],
+        ),
       ],
     );
   }
@@ -453,7 +494,8 @@ class _StockDetailPageState extends State<StockDetailPage> {
                 reservedSize: 56,
                 interval: max_volume / 2,
                 getTitlesWidget: (double value, TitleMeta meta) {
-                  if (value == 0) {
+                  // 0 與貼近頂端的刻度不畫，避免與相鄰標籤重疊
+                  if (value == 0 || value > max_volume * 0.85) {
                     return const SizedBox.shrink();
                   }
                   return Padding(

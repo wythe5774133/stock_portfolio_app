@@ -112,6 +112,7 @@ class DashboardController extends ChangeNotifier {
 
   // 自選股追蹤清單
   List<WatchlistSymbol> watchlist = <WatchlistSymbol>[];
+  String? selected_watchlist_group; // null = 顯示全部分類
 
   // 資產曲線：時間範圍與大盤比較狀態
   CurveRange curve_range = CurveRange.all;
@@ -259,8 +260,10 @@ class DashboardController extends ChangeNotifier {
   }
 
   /// 加入自選追蹤並立即抓報價；回傳 false 表示已在清單中。
-  Future<bool> AddToWatchlist(String symbol, String name) async {
-    final bool added = await repository.AddToWatchlist(symbol, name);
+  Future<bool> AddToWatchlist(String symbol, String name,
+      {String group_name = '自選'}) async {
+    final bool added = await repository.AddToWatchlist(symbol, name,
+        group_name: group_name);
     if (added) {
       await ReloadWatchlist();
       await repository.quote_scheduler.PollQuotesNow();
@@ -272,6 +275,39 @@ class DashboardController extends ChangeNotifier {
   Future<void> RemoveFromWatchlist(String symbol) async {
     await repository.RemoveFromWatchlist(symbol);
     await ReloadWatchlist();
+  }
+
+  /// 更改追蹤股分類。
+  Future<void> ChangeWatchlistGroup(String symbol, String group_name) async {
+    await repository.UpdateWatchlistGroup(symbol, group_name);
+    await ReloadWatchlist();
+  }
+
+  /// 目前存在的分類清單（依加入順序去重）。
+  List<String> GetWatchlistGroups() {
+    final List<String> groups = <String>[];
+    for (final WatchlistSymbol entry in watchlist) {
+      if (!groups.contains(entry.group_name)) {
+        groups.add(entry.group_name);
+      }
+    }
+    return groups;
+  }
+
+  /// 依目前選擇的分類過濾追蹤清單。
+  List<WatchlistSymbol> GetFilteredWatchlist() {
+    if (selected_watchlist_group == null) {
+      return watchlist;
+    }
+    return watchlist
+        .where((WatchlistSymbol w) => w.group_name == selected_watchlist_group)
+        .toList();
+  }
+
+  /// 切換顯示的分類（null = 全部）。
+  void SwitchWatchlistGroup(String? group_name) {
+    selected_watchlist_group = group_name;
+    notifyListeners();
   }
 
   /// 匯出備份 JSON（交易＋追蹤清單＋設定）。
@@ -326,6 +362,14 @@ class DashboardController extends ChangeNotifier {
     notifyListeners();
     await settings_store.SaveSetting(
         SETTING_KEY_THEME_MODE, FormatAppThemeMode(mode));
+  }
+
+  /// 刪除單筆交易並刷新持倉、曲線與股息統計。
+  Future<void> DeleteTransaction(int transaction_id) async {
+    await repository.DeleteTransaction(transaction_id);
+    await ReloadHoldings();
+    await ReloadPortfolioHistory();
+    await RefreshDividendsAndXirr();
   }
 
   /// 代號搜尋（手動記帳自動完成）。

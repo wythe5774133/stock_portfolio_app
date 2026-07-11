@@ -85,14 +85,17 @@ class AssetCurveSection extends StatelessWidget {
     final String sign = pnl >= 0 ? '+' : '';
     final NumberFormat money = NumberFormat.currency(symbol: r'$');
 
-    return Row(
+    // Wrap：手機窄度時 % 徽章與說明圖示自動換行，不會溢出
+    return Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
         Text(
           '期間損益　$sign${money.format(pnl)}',
           style: TextStyle(
               fontSize: 16, fontWeight: FontWeight.w700, color: color),
         ),
-        const SizedBox(width: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
@@ -105,7 +108,6 @@ class AssetCurveSection extends StatelessWidget {
                 fontSize: 12.5, fontWeight: FontWeight.w700, color: color),
           ),
         ),
-        const SizedBox(width: 8),
         const Tooltip(
           message: '期間損益 = 期末市值 − 期初市值 − 期間淨投入本金\n'
               '報酬率採時間加權法（TWR），新投入的本金不會被算成獲利',

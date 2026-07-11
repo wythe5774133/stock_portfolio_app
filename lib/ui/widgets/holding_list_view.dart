@@ -397,16 +397,18 @@ class _HoldingExpandableRow extends StatelessWidget {
             const SizedBox(height: 8),
             for (final StockTransaction tx in transactions.reversed)
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   children: <Widget>[
                     _BuildTypeBadge(tx.transaction_type),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 10),
                     SizedBox(
-                      width: 90,
+                      width: is_compact ? 52 : 90,
                       child: Text(
-                        FormatTradeDate(tx.trade_date),
-                        style: const TextStyle(fontSize: 13),
+                        is_compact
+                            ? FormatShortTradeDate(tx.trade_date)
+                            : FormatTradeDate(tx.trade_date),
+                        style: const TextStyle(fontSize: 12.5),
                       ),
                     ),
                     Expanded(
@@ -422,6 +424,15 @@ class _HoldingExpandableRow extends StatelessWidget {
                       style: const TextStyle(
                           fontSize: 13, fontWeight: FontWeight.w600),
                     ),
+                    IconButton(
+                      tooltip: '刪除這筆交易',
+                      iconSize: 16,
+                      visualDensity: VisualDensity.compact,
+                      color: colors.text_muted,
+                      onPressed: () => _ConfirmAndDeleteTransaction(
+                          context, tx),
+                      icon: const Icon(Icons.delete_outline),
+                    ),
                   ],
                 ),
               ),
@@ -429,6 +440,51 @@ class _HoldingExpandableRow extends StatelessWidget {
         ),
       );
     });
+  }
+
+  /*
+   *  @fn      Future<void> _ConfirmAndDeleteTransaction(BuildContext context, StockTransaction tx)
+   *
+   *  @brief   ( 刪除交易前先確認，刪除後以 SnackBar 回報 )
+   *
+   *  @note    刪除會即時重算持倉、資產曲線與損益。
+   */
+  Future<void> _ConfirmAndDeleteTransaction(
+      BuildContext context, StockTransaction tx) async {
+    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text('刪除交易',
+            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+        content: Text(
+          '確定刪除這筆交易嗎？\n\n'
+          '${tx.symbol}　${FormatTradeDate(tx.trade_date)}　'
+          '${tx.transaction_type == TransactionType.buy ? '買入' : '賣出'} '
+          '${FormatQuantity(tx.quantity)} 股 × '
+          '\$${tx.purchase_price.toStringAsFixed(2)}\n\n'
+          '刪除後持倉與損益會立即重算，此動作無法復原。',
+          style: const TextStyle(fontSize: 13.5, height: 1.5),
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style:
+                FilledButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+            child: const Text('刪除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || tx.id == null) {
+      return;
+    }
+    await controller.DeleteTransaction(tx.id!);
+    messenger.showSnackBar(const SnackBar(content: Text('交易已刪除，持倉已重算')));
   }
 
   /// BUY / SELL 徽章。
@@ -461,6 +517,14 @@ class _HoldingExpandableRow extends StatelessWidget {
         .toStringAsFixed(5)
         .replaceFirst(RegExp(r'0+$'), '')
         .replaceFirst(RegExp(r'\.$'), '');
+  }
+
+  /// yyyyMMdd 轉 MM/dd（窄螢幕交易列用，年份看完整明細）。
+  static String FormatShortTradeDate(int yyyymmdd) {
+    final int month = (yyyymmdd ~/ 100) % 100;
+    final int day = yyyymmdd % 100;
+    return '${month.toString().padLeft(2, '0')}/'
+        '${day.toString().padLeft(2, '0')}';
   }
 
   /// yyyyMMdd 轉 yyyy/MM/dd。

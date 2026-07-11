@@ -1753,8 +1753,20 @@ class $WatchlistSymbolsTable extends WatchlistSymbols
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _group_nameMeta = const VerificationMeta(
+    'group_name',
+  );
   @override
-  List<GeneratedColumn> get $columns => [symbol, name, added_at];
+  late final GeneratedColumn<String> group_name = GeneratedColumn<String>(
+    'group_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('自選'),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [symbol, name, added_at, group_name];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1791,6 +1803,12 @@ class $WatchlistSymbolsTable extends WatchlistSymbols
     } else if (isInserting) {
       context.missing(_added_atMeta);
     }
+    if (data.containsKey('group_name')) {
+      context.handle(
+        _group_nameMeta,
+        group_name.isAcceptableOrUnknown(data['group_name']!, _group_nameMeta),
+      );
+    }
     return context;
   }
 
@@ -1812,6 +1830,10 @@ class $WatchlistSymbolsTable extends WatchlistSymbols
         DriftSqlType.int,
         data['${effectivePrefix}added_at'],
       )!,
+      group_name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}group_name'],
+      )!,
     );
   }
 
@@ -1825,10 +1847,12 @@ class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
   final String symbol;
   final String name;
   final int added_at;
+  final String group_name;
   const WatchlistSymbol({
     required this.symbol,
     required this.name,
     required this.added_at,
+    required this.group_name,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1836,6 +1860,7 @@ class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
     map['symbol'] = Variable<String>(symbol);
     map['name'] = Variable<String>(name);
     map['added_at'] = Variable<int>(added_at);
+    map['group_name'] = Variable<String>(group_name);
     return map;
   }
 
@@ -1844,6 +1869,7 @@ class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
       symbol: Value(symbol),
       name: Value(name),
       added_at: Value(added_at),
+      group_name: Value(group_name),
     );
   }
 
@@ -1856,6 +1882,7 @@ class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
       symbol: serializer.fromJson<String>(json['symbol']),
       name: serializer.fromJson<String>(json['name']),
       added_at: serializer.fromJson<int>(json['added_at']),
+      group_name: serializer.fromJson<String>(json['group_name']),
     );
   }
   @override
@@ -1865,20 +1892,29 @@ class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
       'symbol': serializer.toJson<String>(symbol),
       'name': serializer.toJson<String>(name),
       'added_at': serializer.toJson<int>(added_at),
+      'group_name': serializer.toJson<String>(group_name),
     };
   }
 
-  WatchlistSymbol copyWith({String? symbol, String? name, int? added_at}) =>
-      WatchlistSymbol(
-        symbol: symbol ?? this.symbol,
-        name: name ?? this.name,
-        added_at: added_at ?? this.added_at,
-      );
+  WatchlistSymbol copyWith({
+    String? symbol,
+    String? name,
+    int? added_at,
+    String? group_name,
+  }) => WatchlistSymbol(
+    symbol: symbol ?? this.symbol,
+    name: name ?? this.name,
+    added_at: added_at ?? this.added_at,
+    group_name: group_name ?? this.group_name,
+  );
   WatchlistSymbol copyWithCompanion(WatchlistSymbolsCompanion data) {
     return WatchlistSymbol(
       symbol: data.symbol.present ? data.symbol.value : this.symbol,
       name: data.name.present ? data.name.value : this.name,
       added_at: data.added_at.present ? data.added_at.value : this.added_at,
+      group_name: data.group_name.present
+          ? data.group_name.value
+          : this.group_name,
     );
   }
 
@@ -1887,37 +1923,42 @@ class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
     return (StringBuffer('WatchlistSymbol(')
           ..write('symbol: $symbol, ')
           ..write('name: $name, ')
-          ..write('added_at: $added_at')
+          ..write('added_at: $added_at, ')
+          ..write('group_name: $group_name')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(symbol, name, added_at);
+  int get hashCode => Object.hash(symbol, name, added_at, group_name);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is WatchlistSymbol &&
           other.symbol == this.symbol &&
           other.name == this.name &&
-          other.added_at == this.added_at);
+          other.added_at == this.added_at &&
+          other.group_name == this.group_name);
 }
 
 class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
   final Value<String> symbol;
   final Value<String> name;
   final Value<int> added_at;
+  final Value<String> group_name;
   final Value<int> rowid;
   const WatchlistSymbolsCompanion({
     this.symbol = const Value.absent(),
     this.name = const Value.absent(),
     this.added_at = const Value.absent(),
+    this.group_name = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   WatchlistSymbolsCompanion.insert({
     required String symbol,
     required String name,
     required int added_at,
+    this.group_name = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : symbol = Value(symbol),
        name = Value(name),
@@ -1926,12 +1967,14 @@ class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
     Expression<String>? symbol,
     Expression<String>? name,
     Expression<int>? added_at,
+    Expression<String>? group_name,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (symbol != null) 'symbol': symbol,
       if (name != null) 'name': name,
       if (added_at != null) 'added_at': added_at,
+      if (group_name != null) 'group_name': group_name,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1940,12 +1983,14 @@ class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
     Value<String>? symbol,
     Value<String>? name,
     Value<int>? added_at,
+    Value<String>? group_name,
     Value<int>? rowid,
   }) {
     return WatchlistSymbolsCompanion(
       symbol: symbol ?? this.symbol,
       name: name ?? this.name,
       added_at: added_at ?? this.added_at,
+      group_name: group_name ?? this.group_name,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1962,6 +2007,9 @@ class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
     if (added_at.present) {
       map['added_at'] = Variable<int>(added_at.value);
     }
+    if (group_name.present) {
+      map['group_name'] = Variable<String>(group_name.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1974,6 +2022,7 @@ class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
           ..write('symbol: $symbol, ')
           ..write('name: $name, ')
           ..write('added_at: $added_at, ')
+          ..write('group_name: $group_name, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2935,6 +2984,7 @@ typedef $$WatchlistSymbolsTableCreateCompanionBuilder =
       required String symbol,
       required String name,
       required int added_at,
+      Value<String> group_name,
       Value<int> rowid,
     });
 typedef $$WatchlistSymbolsTableUpdateCompanionBuilder =
@@ -2942,6 +2992,7 @@ typedef $$WatchlistSymbolsTableUpdateCompanionBuilder =
       Value<String> symbol,
       Value<String> name,
       Value<int> added_at,
+      Value<String> group_name,
       Value<int> rowid,
     });
 
@@ -2966,6 +3017,11 @@ class $$WatchlistSymbolsTableFilterComposer
 
   ColumnFilters<int> get added_at => $composableBuilder(
     column: $table.added_at,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get group_name => $composableBuilder(
+    column: $table.group_name,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2993,6 +3049,11 @@ class $$WatchlistSymbolsTableOrderingComposer
     column: $table.added_at,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get group_name => $composableBuilder(
+    column: $table.group_name,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$WatchlistSymbolsTableAnnotationComposer
@@ -3012,6 +3073,11 @@ class $$WatchlistSymbolsTableAnnotationComposer
 
   GeneratedColumn<int> get added_at =>
       $composableBuilder(column: $table.added_at, builder: (column) => column);
+
+  GeneratedColumn<String> get group_name => $composableBuilder(
+    column: $table.group_name,
+    builder: (column) => column,
+  );
 }
 
 class $$WatchlistSymbolsTableTableManager
@@ -3054,11 +3120,13 @@ class $$WatchlistSymbolsTableTableManager
                 Value<String> symbol = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int> added_at = const Value.absent(),
+                Value<String> group_name = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WatchlistSymbolsCompanion(
                 symbol: symbol,
                 name: name,
                 added_at: added_at,
+                group_name: group_name,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3066,11 +3134,13 @@ class $$WatchlistSymbolsTableTableManager
                 required String symbol,
                 required String name,
                 required int added_at,
+                Value<String> group_name = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WatchlistSymbolsCompanion.insert(
                 symbol: symbol,
                 name: name,
                 added_at: added_at,
+                group_name: group_name,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

@@ -171,18 +171,21 @@ class HistoricalPriceService {
    *  @return  由舊到新的蠟燭清單；請求失敗回傳 null
    */
   Future<List<OhlcvCandle>?> FetchOhlcvCandles(
-      String symbol, CandleInterval interval) async {
-    final (String, String) range_and_interval = switch (interval) {
-      CandleInterval.daily => ('6mo', '1d'),
-      CandleInterval.weekly => ('2y', '1wk'),
-      CandleInterval.monthly => ('10y', '1mo'),
+      String symbol, CandleInterval interval,
+      {CandleRange? range}) async {
+    final String yahoo_interval = switch (interval) {
+      CandleInterval.daily => '1d',
+      CandleInterval.weekly => '1wk',
+      CandleInterval.monthly => '1mo',
     };
+    final CandleRange effective_range =
+        range ?? GetDefaultRangeForInterval(interval);
 
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
       final Uri uri =
           Uri.https(host, '/v8/finance/chart/$symbol', <String, String>{
-        'range': range_and_interval.$1,
-        'interval': range_and_interval.$2,
+        'range': effective_range.yahoo_value,
+        'interval': yahoo_interval,
       });
       try {
         final http.Response response = await http_client.get(uri,

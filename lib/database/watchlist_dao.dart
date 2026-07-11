@@ -21,7 +21,8 @@ class WatchlistDao extends DatabaseAccessor<AppDatabase>
   WatchlistDao(super.db);
 
   /// 加入追蹤；已存在則忽略。回傳 true 表示實際新增。
-  Future<bool> AddSymbol(String symbol, String name, int added_at) async {
+  Future<bool> AddSymbol(String symbol, String name, int added_at,
+      {String group_name = '自選'}) async {
     final WatchlistSymbol? existing = await (select(watchlistSymbols)
           ..where((WatchlistSymbols t) => t.symbol.equals(symbol)))
         .getSingleOrNull();
@@ -33,10 +34,20 @@ class WatchlistDao extends DatabaseAccessor<AppDatabase>
         symbol: symbol,
         name: name,
         added_at: added_at,
+        group_name: Value<String>(group_name),
       ),
       mode: InsertMode.insertOrIgnore,
     );
     return true;
+  }
+
+  /// 更改追蹤股的分類。
+  Future<void> UpdateSymbolGroup(String symbol, String group_name) async {
+    await (update(watchlistSymbols)
+          ..where((WatchlistSymbols t) => t.symbol.equals(symbol)))
+        .write(WatchlistSymbolsCompanion(
+      group_name: Value<String>(group_name),
+    ));
   }
 
   /// 移除追蹤。

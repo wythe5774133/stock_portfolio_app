@@ -34,12 +34,12 @@ class SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final AppColors colors = AppColors.Of(context);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: colors.card_background,
+    // 用 Material 而非 Container：卡片內的 ListTile/InkWell 水波紋才能正確繪製
+    return Material(
+      color: colors.card_background,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: colors.card_border),
+        side: BorderSide(color: colors.card_border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

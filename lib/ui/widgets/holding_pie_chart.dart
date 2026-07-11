@@ -1,8 +1,11 @@
 // 持倉圓餅圖：通用元件，市值配置與成本配置共用（傳入不同數值來源）。
+// 圓餅下方附配置明細（比例橫條＋金額＋占比），資訊密度接近商用軟體。
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../theme/app_theme.dart';
 
 /// 圓餅圖單一切片的資料。
 class PieSliceEntry {
@@ -58,6 +61,18 @@ class HoldingPieChart extends StatelessWidget {
     final double total = positive_entries.fold(
         0.0, (double sum, PieSliceEntry e) => sum + e.value);
 
+    return Column(
+      children: <Widget>[
+        _BuildPieWithLegend(positive_entries, total),
+        const SizedBox(height: 14),
+        _BuildAllocationBars(context, positive_entries, total),
+      ],
+    );
+  }
+
+  /// 圓餅圖＋右側圖例。
+  Widget _BuildPieWithLegend(
+      List<PieSliceEntry> positive_entries, double total) {
     return SizedBox(
       height: 220,
       child: Row(
@@ -133,6 +148,86 @@ class HoldingPieChart extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  /// 配置明細：每檔一列（色塊、代號、比例橫條、占比、金額）。
+  Widget _BuildAllocationBars(
+      BuildContext context, List<PieSliceEntry> positive_entries,
+      double total) {
+    final AppColors colors = AppColors.Of(context);
+    final NumberFormat money = NumberFormat.currency(symbol: r'$');
+    final double max_value = positive_entries.first.value; // 已依大小排序
+
+    return Column(
+      children: <Widget>[
+        for (int i = 0; i < positive_entries.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: <Widget>[
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: SLICE_PALETTE[i % SLICE_PALETTE.length],
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 52,
+                  child: Text(
+                    positive_entries[i].label,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                // 比例橫條（以最大持倉為 100% 基準）
+                Expanded(
+                  child: Container(
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: colors.subtle_background,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor:
+                          (positive_entries[i].value / max_value).clamp(0, 1),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: SLICE_PALETTE[i % SLICE_PALETTE.length],
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    '${(positive_entries[i].value / total * 100).toStringAsFixed(1)}%',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                SizedBox(
+                  width: 82,
+                  child: Text(
+                    money.format(positive_entries[i].value),
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                        fontSize: 12, color: colors.text_secondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

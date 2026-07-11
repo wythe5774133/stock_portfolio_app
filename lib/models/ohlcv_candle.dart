@@ -52,3 +52,55 @@ String FormatCandleInterval(CandleInterval interval) {
       return '月K';
   }
 }
+
+/// K 線時間範圍（值為 Yahoo range 參數與顯示標籤）。
+enum CandleRange {
+  three_months('3mo', '3月'),
+  six_months('6mo', '6月'),
+  one_year('1y', '1年'),
+  two_years('2y', '2年'),
+  five_years('5y', '5年'),
+  ten_years('10y', '10年'),
+  max('max', '全部');
+
+  final String yahoo_value; // Yahoo chart 端點的 range 參數
+  final String label; // UI 顯示標籤
+
+  const CandleRange(this.yahoo_value, this.label);
+}
+
+/// 各時間單位可選的範圍（避免日K抓十年導致資料量過大）。
+List<CandleRange> GetRangesForInterval(CandleInterval interval) {
+  switch (interval) {
+    case CandleInterval.daily:
+      return <CandleRange>[
+        CandleRange.three_months,
+        CandleRange.six_months,
+        CandleRange.one_year,
+      ];
+    case CandleInterval.weekly:
+      return <CandleRange>[
+        CandleRange.one_year,
+        CandleRange.two_years,
+        CandleRange.five_years,
+      ];
+    case CandleInterval.monthly:
+      return <CandleRange>[
+        CandleRange.five_years,
+        CandleRange.ten_years,
+        CandleRange.max,
+      ];
+  }
+}
+
+/// 各時間單位的預設範圍。
+CandleRange GetDefaultRangeForInterval(CandleInterval interval) {
+  switch (interval) {
+    case CandleInterval.daily:
+      return CandleRange.six_months;
+    case CandleInterval.weekly:
+      return CandleRange.two_years;
+    case CandleInterval.monthly:
+      return CandleRange.ten_years;
+  }
+}

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../models/symbol_search_result.dart';
 import '../dashboard_controller.dart';
 import '../theme/app_theme.dart';
+import 'watchlist_card.dart' show WatchlistGroupPicker;
 
 /*
  * @author  Toby
@@ -71,9 +72,17 @@ class _AddWatchlistDialogState extends State<AddWatchlistDialog> {
     });
   }
 
-  /// 點選建議：加入追蹤並關閉。
+  /// 點選建議：先選分類再加入追蹤並關閉。
   Future<void> OnResultSelected(SymbolSearchResult result) async {
-    await widget.controller.AddToWatchlist(result.symbol, result.name);
+    final String? group = await WatchlistGroupPicker.Show(
+        context,
+        widget.controller,
+        widget.controller.selected_watchlist_group ?? '自選');
+    if (group == null) {
+      return; // 取消分類選擇 = 取消加入
+    }
+    await widget.controller
+        .AddToWatchlist(result.symbol, result.name, group_name: group);
     if (mounted) {
       Navigator.of(context).pop(result.symbol);
     }

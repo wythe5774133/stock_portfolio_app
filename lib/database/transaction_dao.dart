@@ -82,6 +82,14 @@ class TransactionDao extends DatabaseAccessor<AppDatabase>
     return rows.map(MapRowToModel).toList();
   }
 
+  /// 依主鍵刪除單筆交易；回傳是否有刪到。
+  Future<bool> DeleteTransactionById(int id) async {
+    final int deleted_count = await (delete(stockTransactions)
+          ..where((StockTransactions t) => t.id.equals(id)))
+        .go();
+    return deleted_count > 0;
+  }
+
   /// 將 drift 資料列轉為領域模型。
   model.StockTransaction MapRowToModel(StockTransactionRow row) {
     return model.StockTransaction(
