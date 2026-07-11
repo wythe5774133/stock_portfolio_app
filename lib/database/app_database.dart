@@ -8,6 +8,7 @@ import 'package:drift/native.dart';
 import 'transaction_dao.dart';
 import 'quote_cache_dao.dart';
 import 'historical_price_dao.dart';
+import 'dividend_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -66,6 +67,18 @@ class HistoricalPrices extends Table {
       ];
 }
 
+/// 配息事件表，(symbol, ex_date) 唯一；amount 為每股配息金額。
+class DividendEvents extends Table {
+  TextColumn get symbol => text()();
+  IntColumn get ex_date => integer()(); // 除息日 yyyyMMdd
+  RealColumn get amount_per_share => real()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+        <Column>{symbol, ex_date},
+      ];
+}
+
 /*
  * @author Toby
  * @date 2026/07/11
@@ -74,8 +87,13 @@ class HistoricalPrices extends Table {
  * @note 測試以 NativeDatabase.memory() 注入；正式環境用 OpenConnection() 落地檔案。
  */
 @DriftDatabase(
-  tables: <Type>[StockTransactions, QuoteCache, HistoricalPrices],
-  daos: <Type>[TransactionDao, QuoteCacheDao, HistoricalPriceDao],
+  tables: <Type>[
+    StockTransactions,
+    QuoteCache,
+    HistoricalPrices,
+    DividendEvents,
+  ],
+  daos: <Type>[TransactionDao, QuoteCacheDao, HistoricalPriceDao, DividendDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
@@ -84,5 +102,16 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.Memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (Migrator m) => m.createAll(),
+        onUpgrade: (Migrator m, int from, int to) async {
+          // v1 → v2：新增配息事件表
+          if (from < 2) {
+            await m.createTable(dividendEvents);
+          }
+        },
+      );
 }

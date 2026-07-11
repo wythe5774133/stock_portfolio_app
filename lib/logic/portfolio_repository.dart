@@ -11,6 +11,7 @@ import '../models/stock_quote.dart';
 import '../models/stock_transaction.dart';
 import '../models/symbol_search_result.dart';
 import '../services/csv_transaction_importer.dart';
+import '../services/dividend_service.dart';
 import '../services/historical_price_service.dart';
 import '../services/market_session_resolver.dart';
 import '../services/quote_polling_scheduler.dart';
@@ -45,6 +46,7 @@ class PortfolioRepository {
   final YahooQuoteService quote_service;
   final HistoricalPriceService historical_price_service;
   final StockSymbolSearchService symbol_search_service;
+  final DividendService dividend_service;
   late final QuotePollingScheduler quote_scheduler;
 
   PortfolioRepository({
@@ -56,6 +58,10 @@ class PortfolioRepository {
         quote_service = YahooQuoteService(http_client: http_client),
         symbol_search_service =
             StockSymbolSearchService(http_client: http_client),
+        dividend_service = DividendService(
+          dividend_dao: database.dividendDao,
+          http_client: http_client,
+        ),
         historical_price_service = HistoricalPriceService(
           historical_price_dao: database.historicalPriceDao,
           http_client: http_client,
@@ -176,6 +182,72 @@ class PortfolioRepository {
     await historical_price_service.SyncHistoricalCloses(
         index_symbol, from_date);
     return database.historicalPriceDao.GetHistoricalCloses(index_symbol);
+  }
+
+  /*
+   *  @fn      Future<Map<String, double>> GetDividendIncomeBySymbol()
+   *
+   *  @brief   ( 取得各代號的累計股息收入：先同步配息事件再以除息日持股計算 )
+   *
+   *  @return  {symbol: 累計股息}；同步失敗時使用既有快取
+   */
+  Future<Map<String, double>> GetDividendIncomeBySymbol() async {
+    final List<StockTransaction> transactions =
+        await database.transactionDao.GetAllTransactions();
+    if (transactions.isEmpty) {
+      return <String, double>{};
+    }
+    final Map<String, int> earliest_by_symbol = <String, int>{};
+    for (final StockTransaction tx in transactions) {
+      final int? current = earliest_by_symbol[tx.symbol];
+      if (current == null || tx.trade_date < current) {
+        earliest_by_symbol[tx.symbol] = tx.trade_date;
+      }
+    }
+    for (final MapEntry<String, int> entry in earliest_by_symbol.entries) {
+      await dividend_service.SyncDividendEvents(entry.key, entry.value);
+    }
+    final Map<String, Map<int, double>> events =
+        await database.dividendDao.GetAllDividendEvents();
+    return calculator.CalculateDividendIncomeBySymbol(transactions, events);
+  }
+
+  /*
+   *  @fn      Future<double?> CalculatePortfolioXirr(double total_market_value, Map<String, double> dividend_income)
+   *
+   *  @brief   ( 計算整體組合的資金加權年化報酬率 XIRR )
+   *
+   *  @param   total_market_value - 今日總市值
+   *  @param   dividend_income - 各代號累計股息（視為今日收到的正現金流）
+   *
+   *  @return  年化報酬率；資料不足無法求解回傳 null
+   */
+  Future<double?> CalculatePortfolioXirr(
+      double total_market_value, Map<String, double> dividend_income) async {
+    final List<StockTransaction> transactions =
+        await database.transactionDao.GetAllTransactions();
+    if (transactions.isEmpty) {
+      return null;
+    }
+    final DateTime now = DateTime.now();
+    final int today = now.year * 10000 + now.month * 100 + now.day;
+    final List<(int, double)> cashflows = <(int, double)>[
+      for (final StockTransaction tx in transactions)
+        (
+          tx.trade_date,
+          tx.transaction_type == TransactionType.buy
+              ? -tx.purchase_price * tx.quantity
+              : tx.purchase_price * tx.quantity
+        ),
+      // 股息以「今日一次收到」近似（除息日分攤的差異對年化影響極小）
+      (
+        today,
+        total_market_value +
+            dividend_income.values
+                .fold<double>(0.0, (double sum, double v) => sum + v)
+      ),
+    ];
+    return calculator.CalculateXirr(cashflows);
   }
 
   /// 判斷目前美股時段。

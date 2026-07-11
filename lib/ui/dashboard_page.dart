@@ -10,6 +10,7 @@ import 'package:provider/provider.dart';
 import '../models/holding_position.dart';
 import '../services/csv_transaction_importer.dart';
 import 'dashboard_controller.dart';
+import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
 import 'widgets/add_transaction_dialog.dart';
 import 'widgets/asset_curve_section.dart';
@@ -37,7 +38,6 @@ class DashboardPage extends StatelessWidget {
         context.watch<DashboardController>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F5F7),
       body: controller.is_loading
           ? const Center(child: CircularProgressIndicator())
           : _BuildDashboardBody(context, controller),
@@ -72,10 +72,15 @@ class DashboardPage extends StatelessWidget {
                 total_unrealized_pnl_percent:
                     controller.total_unrealized_pnl_percent,
                 total_realized_pnl: controller.total_realized_pnl,
+                total_day_pnl: controller.total_day_pnl,
+                total_day_change_percent: controller.total_day_change_percent,
+                total_dividend_income: controller.total_dividend_income,
+                portfolio_xirr: controller.portfolio_xirr,
                 profit_colors: controller.profit_colors,
               ),
               const SizedBox(height: 16),
               _BuildSectionCard(
+                context: context,
                 title: '資產曲線',
                 trailing: controller.is_history_loading
                     ? const SizedBox(
@@ -89,6 +94,7 @@ class DashboardPage extends StatelessWidget {
               LayoutBuilder(
                 builder: (BuildContext context, BoxConstraints constraints) {
                   final Widget market_value_pie = _BuildSectionCard(
+                    context: context,
                     title: '持倉配置（依市值）',
                     child: HoldingPieChart(
                       entries: rows
@@ -99,6 +105,7 @@ class DashboardPage extends StatelessWidget {
                     ),
                   );
                   final Widget cost_pie = _BuildSectionCard(
+                    context: context,
                     title: '成本配置（依投入成本）',
                     child: HoldingPieChart(
                       entries: rows
@@ -127,6 +134,7 @@ class DashboardPage extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               _BuildSectionCard(
+                context: context,
                 title: '持倉明細',
                 subtitle: '成本採${controller.cost_method_name}計算，點擊列展開交易明細',
                 padding: EdgeInsets.zero,
@@ -138,7 +146,7 @@ class DashboardPage extends StatelessWidget {
               ),
               if (controller.GetClosedPositions().isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
-                _BuildClosedPositionsCard(controller),
+                _BuildClosedPositionsCard(context, controller),
               ],
               const SizedBox(height: 24),
             ],
@@ -148,8 +156,9 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  /// 頂部工具列：標題 + 更新 / 匯入 / 設定按鈕。
+  /// 頂部工具列：標題 + 更新 / 主題 / 配色 / 匯入 / 記帳按鈕。
   Widget _BuildTopBar(BuildContext context, DashboardController controller) {
+    final AppColors colors = AppColors.Of(context);
     return Row(
       children: <Widget>[
         const Text(
@@ -166,6 +175,7 @@ class DashboardPage extends StatelessWidget {
           onPressed: () => controller.RefreshQuotesNow(),
           icon: const Icon(Icons.refresh, size: 21),
         ),
+        _BuildThemeModeMenu(context, controller),
         _BuildColorConventionMenu(controller),
         const SizedBox(width: 8),
         OutlinedButton.icon(
@@ -173,7 +183,7 @@ class DashboardPage extends StatelessWidget {
           icon: const Icon(Icons.upload_file, size: 18),
           label: const Text('匯入 CSV'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xFF111827),
+            foregroundColor: colors.text_primary,
             padding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           ),
@@ -184,10 +194,44 @@ class DashboardPage extends StatelessWidget {
           icon: const Icon(Icons.add, size: 18),
           label: const Text('記一筆'),
           style: FilledButton.styleFrom(
-            backgroundColor: const Color(0xFF111827),
+            backgroundColor: colors.primary_button_background,
+            foregroundColor: colors.primary_button_foreground,
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
+        ),
+      ],
+    );
+  }
+
+  /// 深淺主題切換選單。
+  Widget _BuildThemeModeMenu(
+      BuildContext context, DashboardController controller) {
+    return PopupMenuButton<AppThemeMode>(
+      tooltip: '背景深淺',
+      icon: Icon(
+        controller.theme_mode == AppThemeMode.dark ||
+                (controller.theme_mode == AppThemeMode.system &&
+                    Theme.of(context).brightness == Brightness.dark)
+            ? Icons.dark_mode_outlined
+            : Icons.light_mode_outlined,
+        size: 21,
+      ),
+      initialValue: controller.theme_mode,
+      onSelected: controller.SwitchAppThemeMode,
+      itemBuilder: (BuildContext context) =>
+          <PopupMenuEntry<AppThemeMode>>[
+        const PopupMenuItem<AppThemeMode>(
+          value: AppThemeMode.light,
+          child: Text('淺色背景'),
+        ),
+        const PopupMenuItem<AppThemeMode>(
+          value: AppThemeMode.dark,
+          child: Text('深色背景'),
+        ),
+        const PopupMenuItem<AppThemeMode>(
+          value: AppThemeMode.system,
+          child: Text('跟隨系統'),
         ),
       ],
     );
@@ -214,8 +258,9 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  /// 通用區塊卡片。
+  /// 通用區塊卡片（深淺主題自動適應）。
   Widget _BuildSectionCard({
+    required BuildContext context,
     required String title,
     required Widget child,
     String? subtitle,
@@ -223,12 +268,13 @@ class DashboardPage extends StatelessWidget {
     EdgeInsets padding = const EdgeInsets.fromLTRB(20, 0, 20, 20),
     EdgeInsets title_padding = const EdgeInsets.fromLTRB(20, 18, 20, 14),
   }) {
+    final AppColors colors = AppColors.Of(context);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.card_background,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8EAEE)),
+        border: Border.all(color: colors.card_border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,8 +296,8 @@ class DashboardPage extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           subtitle,
-                          style: const TextStyle(
-                              fontSize: 12, color: Color(0xFF9CA3AF)),
+                          style: TextStyle(
+                              fontSize: 12, color: colors.text_muted),
                         ),
                       ],
                     ],
@@ -268,8 +314,10 @@ class DashboardPage extends StatelessWidget {
   }
 
   /// 已清倉個股卡片（僅顯示已實現損益）。
-  Widget _BuildClosedPositionsCard(DashboardController controller) {
+  Widget _BuildClosedPositionsCard(
+      BuildContext context, DashboardController controller) {
     return _BuildSectionCard(
+      context: context,
       title: '已清倉',
       child: Column(
         children: <Widget>[

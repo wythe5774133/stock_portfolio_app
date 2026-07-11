@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../models/stock_transaction.dart';
 import '../../models/symbol_search_result.dart';
 import '../dashboard_controller.dart';
+import '../theme/app_theme.dart';
 
 /*
  * @author  Toby
@@ -216,13 +217,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
         FilledButton(
           onPressed: is_saving ? null : OnSave,
           style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF111827)),
+            backgroundColor: AppColors.Of(context).primary_button_background,
+            foregroundColor: AppColors.Of(context).primary_button_foreground,
+          ),
           child: is_saving
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white))
+                  child: CircularProgressIndicator(strokeWidth: 2))
               : const Text('儲存'),
         ),
       ],
@@ -264,14 +266,14 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       margin: const EdgeInsets.only(top: 4),
       constraints: const BoxConstraints(maxHeight: 220),
       decoration: BoxDecoration(
-        border: Border.all(color: const Color(0xFFE8EAEE)),
+        border: Border.all(color: AppColors.Of(context).card_border),
         borderRadius: BorderRadius.circular(10),
       ),
       child: ListView.separated(
         shrinkWrap: true,
         itemCount: search_results.length,
         separatorBuilder: (BuildContext context, int index) =>
-            const Divider(height: 1, color: Color(0xFFF0F1F4)),
+            Divider(height: 1, color: AppColors.Of(context).divider),
         itemBuilder: (BuildContext context, int index) {
           final SymbolSearchResult result = search_results[index];
           return ListTile(
@@ -285,14 +287,16 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
                 Expanded(
                   child: Text(result.name,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 13, color: Color(0xFF6B7280))),
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.Of(context).text_secondary)),
                 ),
               ],
             ),
             trailing: Text(result.exchange,
-                style:
-                    const TextStyle(fontSize: 11, color: Color(0xFF9CA3AF))),
+                style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.Of(context).text_muted)),
             onTap: () => OnSymbolSelected(result),
           );
         },

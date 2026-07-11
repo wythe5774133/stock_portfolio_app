@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../models/stock_transaction.dart';
 import '../dashboard_controller.dart';
+import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
 
 /*
@@ -39,12 +40,13 @@ class HoldingListView extends StatelessWidget {
       );
     }
 
+    final AppColors colors = AppColors.Of(context);
     return Column(
       children: <Widget>[
-        _BuildHeaderRow(),
-        const Divider(height: 1, color: Color(0xFFE8EAEE)),
+        _BuildHeaderRow(context),
+        Divider(height: 1, color: colors.card_border),
         for (int i = 0; i < rows.length; i++) ...<Widget>[
-          if (i > 0) const Divider(height: 1, color: Color(0xFFF0F1F4)),
+          if (i > 0) Divider(height: 1, color: colors.divider),
           _HoldingExpandableRow(row: rows[i], profit_colors: profit_colors),
         ],
       ],
@@ -52,14 +54,14 @@ class HoldingListView extends StatelessWidget {
   }
 
   /// 表頭列。
-  Widget _BuildHeaderRow() {
-    const TextStyle header_style = TextStyle(
+  Widget _BuildHeaderRow(BuildContext context) {
+    final TextStyle header_style = TextStyle(
       fontSize: 12,
       fontWeight: FontWeight.w600,
-      color: Color(0xFF6B7280),
+      color: AppColors.Of(context).text_secondary,
     );
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: <Widget>[
           Expanded(flex: 3, child: Text('代號', style: header_style)),
@@ -83,7 +85,7 @@ class HoldingListView extends StatelessWidget {
               flex: 4,
               child: Text('未實現損益', style: header_style,
                   textAlign: TextAlign.right)),
-          SizedBox(width: 32),
+          const SizedBox(width: 32),
         ],
       ),
     );
@@ -153,9 +155,18 @@ class _HoldingExpandableRow extends StatelessWidget {
                         fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   Text(
-                    row.price_source_label,
-                    style:
-                        const TextStyle(fontSize: 10.5, color: Colors.grey),
+                    row.day_change_percent != null
+                        ? '${row.price_source_label}・今日 '
+                            '${row.day_change_percent! >= 0 ? '+' : ''}'
+                            '${row.day_change_percent!.toStringAsFixed(2)}%'
+                        : row.price_source_label,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: row.day_change_percent != null
+                          ? profit_colors
+                              .ResolveColorForValue(row.day_change_percent!)
+                          : Colors.grey,
+                    ),
                   ),
                 ],
               ),
@@ -203,9 +214,11 @@ class _HoldingExpandableRow extends StatelessWidget {
     final NumberFormat money = NumberFormat.currency(symbol: r'$');
     final List<StockTransaction> transactions = row.position.transactions;
 
-    return Container(
+    return Builder(builder: (BuildContext context) {
+      final AppColors colors = AppColors.Of(context);
+      return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FB),
+        color: colors.subtle_background,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(14),
@@ -216,12 +229,23 @@ class _HoldingExpandableRow extends StatelessWidget {
             children: <Widget>[
               Text(
                 '交易明細（${transactions.length} 筆）',
-                style: const TextStyle(
+                style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF6B7280)),
+                    color: colors.text_secondary),
               ),
               const Spacer(),
+              if (row.dividend_income > 0) ...<Widget>[
+                Text(
+                  '累計股息 +${money.format(row.dividend_income)}',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.text_secondary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+              ],
               Text(
                 '已實現損益 '
                 '${row.position.realized_pnl >= 0 ? '+' : ''}'
@@ -268,6 +292,7 @@ class _HoldingExpandableRow extends StatelessWidget {
         ],
       ),
     );
+    });
   }
 
   /// BUY / SELL 徽章。

@@ -1442,6 +1442,282 @@ class HistoricalPricesCompanion extends UpdateCompanion<HistoricalPrice> {
   }
 }
 
+class $DividendEventsTable extends DividendEvents
+    with TableInfo<$DividendEventsTable, DividendEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DividendEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _symbolMeta = const VerificationMeta('symbol');
+  @override
+  late final GeneratedColumn<String> symbol = GeneratedColumn<String>(
+    'symbol',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ex_dateMeta = const VerificationMeta(
+    'ex_date',
+  );
+  @override
+  late final GeneratedColumn<int> ex_date = GeneratedColumn<int>(
+    'ex_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _amount_per_shareMeta = const VerificationMeta(
+    'amount_per_share',
+  );
+  @override
+  late final GeneratedColumn<double> amount_per_share = GeneratedColumn<double>(
+    'amount_per_share',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [symbol, ex_date, amount_per_share];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dividend_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DividendEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('symbol')) {
+      context.handle(
+        _symbolMeta,
+        symbol.isAcceptableOrUnknown(data['symbol']!, _symbolMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_symbolMeta);
+    }
+    if (data.containsKey('ex_date')) {
+      context.handle(
+        _ex_dateMeta,
+        ex_date.isAcceptableOrUnknown(data['ex_date']!, _ex_dateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ex_dateMeta);
+    }
+    if (data.containsKey('amount_per_share')) {
+      context.handle(
+        _amount_per_shareMeta,
+        amount_per_share.isAcceptableOrUnknown(
+          data['amount_per_share']!,
+          _amount_per_shareMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_amount_per_shareMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => const {};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {symbol, ex_date},
+  ];
+  @override
+  DividendEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DividendEvent(
+      symbol: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}symbol'],
+      )!,
+      ex_date: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}ex_date'],
+      )!,
+      amount_per_share: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}amount_per_share'],
+      )!,
+    );
+  }
+
+  @override
+  $DividendEventsTable createAlias(String alias) {
+    return $DividendEventsTable(attachedDatabase, alias);
+  }
+}
+
+class DividendEvent extends DataClass implements Insertable<DividendEvent> {
+  final String symbol;
+  final int ex_date;
+  final double amount_per_share;
+  const DividendEvent({
+    required this.symbol,
+    required this.ex_date,
+    required this.amount_per_share,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['symbol'] = Variable<String>(symbol);
+    map['ex_date'] = Variable<int>(ex_date);
+    map['amount_per_share'] = Variable<double>(amount_per_share);
+    return map;
+  }
+
+  DividendEventsCompanion toCompanion(bool nullToAbsent) {
+    return DividendEventsCompanion(
+      symbol: Value(symbol),
+      ex_date: Value(ex_date),
+      amount_per_share: Value(amount_per_share),
+    );
+  }
+
+  factory DividendEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DividendEvent(
+      symbol: serializer.fromJson<String>(json['symbol']),
+      ex_date: serializer.fromJson<int>(json['ex_date']),
+      amount_per_share: serializer.fromJson<double>(json['amount_per_share']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'symbol': serializer.toJson<String>(symbol),
+      'ex_date': serializer.toJson<int>(ex_date),
+      'amount_per_share': serializer.toJson<double>(amount_per_share),
+    };
+  }
+
+  DividendEvent copyWith({
+    String? symbol,
+    int? ex_date,
+    double? amount_per_share,
+  }) => DividendEvent(
+    symbol: symbol ?? this.symbol,
+    ex_date: ex_date ?? this.ex_date,
+    amount_per_share: amount_per_share ?? this.amount_per_share,
+  );
+  DividendEvent copyWithCompanion(DividendEventsCompanion data) {
+    return DividendEvent(
+      symbol: data.symbol.present ? data.symbol.value : this.symbol,
+      ex_date: data.ex_date.present ? data.ex_date.value : this.ex_date,
+      amount_per_share: data.amount_per_share.present
+          ? data.amount_per_share.value
+          : this.amount_per_share,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendEvent(')
+          ..write('symbol: $symbol, ')
+          ..write('ex_date: $ex_date, ')
+          ..write('amount_per_share: $amount_per_share')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(symbol, ex_date, amount_per_share);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DividendEvent &&
+          other.symbol == this.symbol &&
+          other.ex_date == this.ex_date &&
+          other.amount_per_share == this.amount_per_share);
+}
+
+class DividendEventsCompanion extends UpdateCompanion<DividendEvent> {
+  final Value<String> symbol;
+  final Value<int> ex_date;
+  final Value<double> amount_per_share;
+  final Value<int> rowid;
+  const DividendEventsCompanion({
+    this.symbol = const Value.absent(),
+    this.ex_date = const Value.absent(),
+    this.amount_per_share = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DividendEventsCompanion.insert({
+    required String symbol,
+    required int ex_date,
+    required double amount_per_share,
+    this.rowid = const Value.absent(),
+  }) : symbol = Value(symbol),
+       ex_date = Value(ex_date),
+       amount_per_share = Value(amount_per_share);
+  static Insertable<DividendEvent> custom({
+    Expression<String>? symbol,
+    Expression<int>? ex_date,
+    Expression<double>? amount_per_share,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (symbol != null) 'symbol': symbol,
+      if (ex_date != null) 'ex_date': ex_date,
+      if (amount_per_share != null) 'amount_per_share': amount_per_share,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DividendEventsCompanion copyWith({
+    Value<String>? symbol,
+    Value<int>? ex_date,
+    Value<double>? amount_per_share,
+    Value<int>? rowid,
+  }) {
+    return DividendEventsCompanion(
+      symbol: symbol ?? this.symbol,
+      ex_date: ex_date ?? this.ex_date,
+      amount_per_share: amount_per_share ?? this.amount_per_share,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (symbol.present) {
+      map['symbol'] = Variable<String>(symbol.value);
+    }
+    if (ex_date.present) {
+      map['ex_date'] = Variable<int>(ex_date.value);
+    }
+    if (amount_per_share.present) {
+      map['amount_per_share'] = Variable<double>(amount_per_share.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DividendEventsCompanion(')
+          ..write('symbol: $symbol, ')
+          ..write('ex_date: $ex_date, ')
+          ..write('amount_per_share: $amount_per_share, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1451,6 +1727,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HistoricalPricesTable historicalPrices = $HistoricalPricesTable(
     this,
   );
+  late final $DividendEventsTable dividendEvents = $DividendEventsTable(this);
   late final TransactionDao transactionDao = TransactionDao(
     this as AppDatabase,
   );
@@ -1458,6 +1735,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final HistoricalPriceDao historicalPriceDao = HistoricalPriceDao(
     this as AppDatabase,
   );
+  late final DividendDao dividendDao = DividendDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1466,6 +1744,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     stockTransactions,
     quoteCache,
     historicalPrices,
+    dividendEvents,
   ];
 }
 
@@ -2218,6 +2497,172 @@ typedef $$HistoricalPricesTableProcessedTableManager =
       HistoricalPrice,
       PrefetchHooks Function()
     >;
+typedef $$DividendEventsTableCreateCompanionBuilder =
+    DividendEventsCompanion Function({
+      required String symbol,
+      required int ex_date,
+      required double amount_per_share,
+      Value<int> rowid,
+    });
+typedef $$DividendEventsTableUpdateCompanionBuilder =
+    DividendEventsCompanion Function({
+      Value<String> symbol,
+      Value<int> ex_date,
+      Value<double> amount_per_share,
+      Value<int> rowid,
+    });
+
+class $$DividendEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $DividendEventsTable> {
+  $$DividendEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get ex_date => $composableBuilder(
+    column: $table.ex_date,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get amount_per_share => $composableBuilder(
+    column: $table.amount_per_share,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DividendEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DividendEventsTable> {
+  $$DividendEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get ex_date => $composableBuilder(
+    column: $table.ex_date,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get amount_per_share => $composableBuilder(
+    column: $table.amount_per_share,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DividendEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DividendEventsTable> {
+  $$DividendEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get symbol =>
+      $composableBuilder(column: $table.symbol, builder: (column) => column);
+
+  GeneratedColumn<int> get ex_date =>
+      $composableBuilder(column: $table.ex_date, builder: (column) => column);
+
+  GeneratedColumn<double> get amount_per_share => $composableBuilder(
+    column: $table.amount_per_share,
+    builder: (column) => column,
+  );
+}
+
+class $$DividendEventsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DividendEventsTable,
+          DividendEvent,
+          $$DividendEventsTableFilterComposer,
+          $$DividendEventsTableOrderingComposer,
+          $$DividendEventsTableAnnotationComposer,
+          $$DividendEventsTableCreateCompanionBuilder,
+          $$DividendEventsTableUpdateCompanionBuilder,
+          (
+            DividendEvent,
+            BaseReferences<_$AppDatabase, $DividendEventsTable, DividendEvent>,
+          ),
+          DividendEvent,
+          PrefetchHooks Function()
+        > {
+  $$DividendEventsTableTableManager(
+    _$AppDatabase db,
+    $DividendEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DividendEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DividendEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DividendEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> symbol = const Value.absent(),
+                Value<int> ex_date = const Value.absent(),
+                Value<double> amount_per_share = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => DividendEventsCompanion(
+                symbol: symbol,
+                ex_date: ex_date,
+                amount_per_share: amount_per_share,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String symbol,
+                required int ex_date,
+                required double amount_per_share,
+                Value<int> rowid = const Value.absent(),
+              }) => DividendEventsCompanion.insert(
+                symbol: symbol,
+                ex_date: ex_date,
+                amount_per_share: amount_per_share,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DividendEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DividendEventsTable,
+      DividendEvent,
+      $$DividendEventsTableFilterComposer,
+      $$DividendEventsTableOrderingComposer,
+      $$DividendEventsTableAnnotationComposer,
+      $$DividendEventsTableCreateCompanionBuilder,
+      $$DividendEventsTableUpdateCompanionBuilder,
+      (
+        DividendEvent,
+        BaseReferences<_$AppDatabase, $DividendEventsTable, DividendEvent>,
+      ),
+      DividendEvent,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2228,4 +2673,6 @@ class $AppDatabaseManager {
       $$QuoteCacheTableTableManager(_db, _db.quoteCache);
   $$HistoricalPricesTableTableManager get historicalPrices =>
       $$HistoricalPricesTableTableManager(_db, _db.historicalPrices);
+  $$DividendEventsTableTableManager get dividendEvents =>
+      $$DividendEventsTableTableManager(_db, _db.dividendEvents);
 }

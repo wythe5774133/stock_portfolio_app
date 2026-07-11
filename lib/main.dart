@@ -10,6 +10,7 @@ import 'logic/portfolio_repository.dart';
 import 'services/market_session_resolver.dart';
 import 'ui/dashboard_controller.dart';
 import 'ui/dashboard_page.dart';
+import 'ui/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,29 +32,25 @@ class StockPortfolioApp extends StatelessWidget {
     return ChangeNotifierProvider<DashboardController>(
       create: (BuildContext context) =>
           DashboardController(repository: repository)..InitializeDashboard(),
-      child: MaterialApp(
-        title: '股票庫存管理',
-        debugShowCheckedModeBanner: false,
-        locale: const Locale('zh', 'TW'),
-        supportedLocales: const <Locale>[Locale('zh', 'TW'), Locale('en')],
-        localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        theme: ThemeData(
-          useMaterial3: true,
-          colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color(0xFF4F6DF5),
-            surface: Colors.white,
-          ),
-          fontFamilyFallback: const <String>[
-            'PingFang TC', // macOS 繁中
-            'Microsoft JhengHei', // Windows 繁中
-            'Noto Sans TC',
-          ],
-        ),
-        home: const DashboardPage(),
+      child: Consumer<DashboardController>(
+        builder: (BuildContext context, DashboardController controller,
+            Widget? child) {
+          return MaterialApp(
+            title: '股票庫存管理',
+            debugShowCheckedModeBanner: false,
+            locale: const Locale('zh', 'TW'),
+            supportedLocales: const <Locale>[Locale('zh', 'TW'), Locale('en')],
+            localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            theme: BuildAppTheme(Brightness.light),
+            darkTheme: BuildAppTheme(Brightness.dark),
+            themeMode: ConvertToMaterialThemeMode(controller.theme_mode),
+            home: const DashboardPage(),
+          );
+        },
       ),
     );
   }

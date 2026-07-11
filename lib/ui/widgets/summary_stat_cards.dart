@@ -1,8 +1,10 @@
-// 儀表板頂端統計卡片列：總資產、總成本、未實現損益、已實現損益。
+// 儀表板頂端統計卡片：總資產（含今日損益）、總成本、未實現損益、
+// 已實現損益、累計股息、年化報酬率（XIRR）。深淺主題自動適應。
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
 
 /*
@@ -12,8 +14,7 @@ import '../theme/profit_color_scheme.dart';
  *
  * @class   SummaryStatCards
  *
- * @brief   四張統計卡片：總資產、總成本、未實現損益（金額+%）、已實現損益。
- *          損益卡片顏色依配色慣例（美股/台股）切換。
+ * @brief   六張統計卡片以 Wrap 排版自動換行；損益類數字依配色慣例上色。
  */
 class SummaryStatCards extends StatelessWidget {
   final double total_market_value;
@@ -21,6 +22,10 @@ class SummaryStatCards extends StatelessWidget {
   final double total_unrealized_pnl;
   final double total_unrealized_pnl_percent;
   final double total_realized_pnl;
+  final double total_day_pnl;
+  final double total_day_change_percent;
+  final double total_dividend_income;
+  final double? portfolio_xirr; // null = 資料不足
   final ProfitColorScheme profit_colors;
 
   const SummaryStatCards({
@@ -30,68 +35,90 @@ class SummaryStatCards extends StatelessWidget {
     required this.total_unrealized_pnl,
     required this.total_unrealized_pnl_percent,
     required this.total_realized_pnl,
+    required this.total_day_pnl,
+    required this.total_day_change_percent,
+    required this.total_dividend_income,
+    required this.portfolio_xirr,
     required this.profit_colors,
   });
 
   @override
   Widget build(BuildContext context) {
+    final AppColors colors = AppColors.Of(context);
     final NumberFormat money = NumberFormat.currency(symbol: r'$');
-    final String sign = total_unrealized_pnl >= 0 ? '+' : '';
+    final String unrealized_sign = total_unrealized_pnl >= 0 ? '+' : '';
     final String realized_sign = total_realized_pnl >= 0 ? '+' : '';
+    final String day_sign = total_day_pnl >= 0 ? '+' : '';
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final bool is_narrow = constraints.maxWidth < 760;
-        final List<Widget> cards = <Widget>[
-          _BuildStatCard(
-            title: '總資產',
-            value: money.format(total_market_value),
-            value_color: null,
-          ),
-          _BuildStatCard(
-            title: '總成本',
-            value: money.format(total_cost_basis),
-            value_color: null,
-          ),
-          _BuildStatCard(
-            title: '未實現損益',
-            value: '$sign${money.format(total_unrealized_pnl)}',
-            subtitle:
-                '$sign${total_unrealized_pnl_percent.toStringAsFixed(2)}%',
-            value_color:
-                profit_colors.ResolveColorForValue(total_unrealized_pnl),
-          ),
-          _BuildStatCard(
-            title: '已實現損益',
-            value: '$realized_sign${money.format(total_realized_pnl)}',
-            value_color:
-                profit_colors.ResolveColorForValue(total_realized_pnl),
-          ),
-        ];
+        // 依可用寬度決定每列卡片數：寬 → 6 張一列，窄 → 自動換行
+        final double card_width = constraints.maxWidth >= 1080
+            ? (constraints.maxWidth - 5 * 12) / 6
+            : constraints.maxWidth >= 700
+                ? (constraints.maxWidth - 2 * 12) / 3
+                : (constraints.maxWidth - 12) / 2;
 
-        if (is_narrow) {
-          return Column(
-            children: <Widget>[
-              Row(children: <Widget>[
-                Expanded(child: cards[0]),
-                const SizedBox(width: 12),
-                Expanded(child: cards[1]),
-              ]),
-              const SizedBox(height: 12),
-              Row(children: <Widget>[
-                Expanded(child: cards[2]),
-                const SizedBox(width: 12),
-                Expanded(child: cards[3]),
-              ]),
-            ],
-          );
-        }
-        return Row(
+        return Wrap(
+          spacing: 12,
+          runSpacing: 12,
           children: <Widget>[
-            for (int i = 0; i < cards.length; i++) ...<Widget>[
-              if (i > 0) const SizedBox(width: 12),
-              Expanded(child: cards[i]),
-            ],
+            _BuildStatCard(
+              colors: colors,
+              width: card_width,
+              title: '總資產',
+              value: money.format(total_market_value),
+              subtitle: '今日 $day_sign${money.format(total_day_pnl)}'
+                  '（$day_sign${total_day_change_percent.toStringAsFixed(2)}%）',
+              subtitle_color:
+                  profit_colors.ResolveColorForValue(total_day_pnl),
+            ),
+            _BuildStatCard(
+              colors: colors,
+              width: card_width,
+              title: '總成本',
+              value: money.format(total_cost_basis),
+            ),
+            _BuildStatCard(
+              colors: colors,
+              width: card_width,
+              title: '未實現損益',
+              value: '$unrealized_sign${money.format(total_unrealized_pnl)}',
+              subtitle:
+                  '$unrealized_sign${total_unrealized_pnl_percent.toStringAsFixed(2)}%',
+              value_color:
+                  profit_colors.ResolveColorForValue(total_unrealized_pnl),
+              subtitle_color:
+                  profit_colors.ResolveColorForValue(total_unrealized_pnl),
+            ),
+            _BuildStatCard(
+              colors: colors,
+              width: card_width,
+              title: '已實現損益',
+              value: '$realized_sign${money.format(total_realized_pnl)}',
+              value_color:
+                  profit_colors.ResolveColorForValue(total_realized_pnl),
+            ),
+            _BuildStatCard(
+              colors: colors,
+              width: card_width,
+              title: '累計股息',
+              value: money.format(total_dividend_income),
+              subtitle: '依除息日持股計算',
+            ),
+            _BuildStatCard(
+              colors: colors,
+              width: card_width,
+              title: '年化報酬率 XIRR',
+              value: portfolio_xirr != null
+                  ? '${portfolio_xirr! >= 0 ? '+' : ''}'
+                      '${(portfolio_xirr! * 100).toStringAsFixed(2)}%'
+                  : '—',
+              subtitle: '資金加權・含股息',
+              value_color: portfolio_xirr != null
+                  ? profit_colors.ResolveColorForValue(portfolio_xirr!)
+                  : null,
+            ),
           ],
         );
       },
@@ -100,24 +127,28 @@ class SummaryStatCards extends StatelessWidget {
 
   /// 單張統計卡片。
   Widget _BuildStatCard({
+    required AppColors colors,
+    required double width,
     required String title,
     required String value,
     String? subtitle,
     Color? value_color,
+    Color? subtitle_color,
   }) {
     return Container(
+      width: width,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: colors.card_background,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE8EAEE)),
+        border: Border.all(color: colors.card_border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Text(
             title,
-            style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280)),
+            style: TextStyle(fontSize: 13, color: colors.text_secondary),
           ),
           const SizedBox(height: 8),
           FittedBox(
@@ -125,21 +156,24 @@ class SummaryStatCards extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: value_color ?? const Color(0xFF111827),
+                color: value_color ?? colors.text_primary,
                 letterSpacing: -0.4,
               ),
             ),
           ),
           if (subtitle != null) ...<Widget>[
             const SizedBox(height: 2),
-            Text(
-              subtitle,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: value_color,
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: subtitle_color ?? colors.text_muted,
+                ),
               ),
             ),
           ],

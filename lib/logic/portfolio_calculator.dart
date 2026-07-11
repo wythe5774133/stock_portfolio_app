@@ -1,6 +1,8 @@
 // 投資組合計算引擎：加權平均成本法的持倉彙總，與逐日重播的資產曲線重建。
 // 純 Dart 邏輯，不依賴資料庫與網路，方便單元測試。
 
+import 'dart:math' as math;
+
 import '../models/holding_position.dart';
 import '../models/portfolio_snapshot.dart';
 import '../models/stock_transaction.dart';
@@ -285,6 +287,132 @@ class PortfolioCalculator {
       }
     }
     return percents;
+  }
+
+  /*
+   *  @fn      Map<String, double> CalculateDividendIncomeBySymbol(
+   *               List<StockTransaction> transactions,
+   *               Map<String, Map<int, double>> dividend_events)
+   *
+   *  @brief   ( 計算各代號的累計股息收入：除息日當時持股數 × 每股配息 )
+   *
+   *  @param   transactions - 全部交易紀錄
+   *  @param   dividend_events - {symbol: {除息日: 每股金額}}
+   *
+   *  @return  {symbol: 累計股息}；除息日前一天須已持有才計入
+   *
+   *  @note    以「除息日之前（不含當日）的交易」重播出持股數，
+   *           因為除息日當天買入的股票領不到該次配息。
+   */
+  Map<String, double> CalculateDividendIncomeBySymbol(
+    List<StockTransaction> transactions,
+    Map<String, Map<int, double>> dividend_events,
+  ) {
+    final Map<String, List<StockTransaction>> grouped =
+        GroupTransactionsBySymbol(transactions);
+    final Map<String, double> income_by_symbol = <String, double>{};
+
+    for (final MapEntry<String, Map<int, double>> entry
+        in dividend_events.entries) {
+      final String symbol = entry.key;
+      final List<StockTransaction>? txs = grouped[symbol];
+      if (txs == null) {
+        continue;
+      }
+      double income = 0.0;
+      final List<int> ex_dates = entry.value.keys.toList()..sort();
+      for (final int ex_date in ex_dates) {
+        double quantity_at_ex_date = 0.0;
+        for (final StockTransaction tx in txs) {
+          if (tx.trade_date >= ex_date) {
+            break; // 已排序，之後的交易都在除息日當天或之後
+          }
+          quantity_at_ex_date += tx.transaction_type == TransactionType.buy
+              ? tx.quantity
+              : -tx.quantity;
+        }
+        if (quantity_at_ex_date > QUANTITY_EPSILON) {
+          income += quantity_at_ex_date * entry.value[ex_date]!;
+        }
+      }
+      if (income > 0) {
+        income_by_symbol[symbol] = income;
+      }
+    }
+    return income_by_symbol;
+  }
+
+  /*
+   *  @fn      double? CalculateXirr(List<(int, double)> dated_cashflows)
+   *
+   *  @brief   ( 計算資金加權年化報酬率 XIRR，二分法求解 )
+   *
+   *  @param   dated_cashflows - (yyyyMMdd, 現金流) 清單：
+   *           買入為負、賣出與股息為正、最後一筆為今日總市值（正）
+   *
+   *  @return  年化報酬率（0.15 = 15%）；無法求解（現金流同號、
+   *           全部同一天、或無收斂）回傳 null
+   *
+   *  @note    求解 Σ CF_i / (1+r)^(d_i/365) = 0，r 搜尋範圍 (-0.99, 10)。
+   */
+  double? CalculateXirr(List<(int, double)> dated_cashflows) {
+    if (dated_cashflows.length < 2) {
+      return null;
+    }
+    final bool has_negative =
+        dated_cashflows.any(((int, double) cf) => cf.$2 < 0);
+    final bool has_positive =
+        dated_cashflows.any(((int, double) cf) => cf.$2 > 0);
+    if (!has_negative || !has_positive) {
+      return null;
+    }
+
+    final DateTime first_date = ConvertYyyymmddToDateTime(dated_cashflows
+        .map(((int, double) cf) => cf.$1)
+        .reduce((int a, int b) => a < b ? a : b));
+
+    // 現金流淨現值函數
+    double EvaluateNetPresentValue(double rate) {
+      double total = 0.0;
+      for (final (int, double) cf in dated_cashflows) {
+        final double years = ConvertYyyymmddToDateTime(cf.$1)
+                .difference(first_date)
+                .inDays /
+            365.0;
+        total += cf.$2 / _Power(1 + rate, years);
+      }
+      return total;
+    }
+
+    double low = -0.99;
+    double high = 10.0;
+    double npv_low = EvaluateNetPresentValue(low);
+    final double npv_high = EvaluateNetPresentValue(high);
+    if (npv_low.isNaN || npv_high.isNaN || npv_low * npv_high > 0) {
+      return null; // 兩端同號，無解（例如全部現金流在同一天）
+    }
+    for (int i = 0; i < 200; i++) {
+      final double mid = (low + high) / 2;
+      final double npv_mid = EvaluateNetPresentValue(mid);
+      if (npv_mid.abs() < 1e-9) {
+        return mid;
+      }
+      if (npv_low * npv_mid < 0) {
+        high = mid;
+      } else {
+        low = mid;
+        npv_low = npv_mid;
+      }
+    }
+    return (low + high) / 2;
+  }
+
+  /// 實數次方（底數必為正，供折現計算）。
+  static double _Power(double base, double exponent) {
+    if (base <= 0) {
+      return double.nan;
+    }
+    return math.pow(base, exponent).toDouble();
   }
 
   /// 依代號分組並依 (trade_date, id) 升冪排序。
