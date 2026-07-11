@@ -1,0 +1,15 @@
+# 此檔案設定 Dart/Flutter 靜態分析規則。
+# 依 Wythe 個人規範停用與 PascalCase 方法命名衝突的 lint。
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    # 停用：Wythe 規範要求方法用 PascalCase（動詞開頭），與此 lint 衝突
+    non_constant_identifier_names: false
+    # 停用：常數採 UPPER_SNAKE_CASE，與此 lint 衝突
+    constant_identifier_names: false

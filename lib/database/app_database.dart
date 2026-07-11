@@ -1,0 +1,88 @@
+// drift 資料庫 schema 定義：交易、報價快取、歷史股價三張表。
+// 此檔為純 Dart（不含任何 Flutter 依賴）；正式環境的資料庫檔案位置
+// 由 database_connection.dart 的 OpenConnection() 提供。
+
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+
+import 'transaction_dao.dart';
+import 'quote_cache_dao.dart';
+import 'historical_price_dao.dart';
+
+part 'app_database.g.dart';
+
+/// 交易紀錄表；(symbol, trade_date, purchase_price, quantity, transaction_type)
+/// 建 UNIQUE 索引供 INSERT OR IGNORE 去重。
+/// 資料列類別命名為 StockTransactionRow，避免與領域模型 StockTransaction 衝突。
+@DataClassName('StockTransactionRow')
+class StockTransactions extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get symbol => text()();
+  IntColumn get trade_date => integer()(); // yyyyMMdd
+  RealColumn get purchase_price => real()();
+  RealColumn get quantity => real()();
+  TextColumn get transaction_type => text()(); // BUY / SELL
+  RealColumn get commission => real().nullable()();
+  TextColumn get comment => text().nullable()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+        <Column>{
+          symbol,
+          trade_date,
+          purchase_price,
+          quantity,
+          transaction_type,
+        },
+      ];
+}
+
+/// 即時報價快取表，以 symbol 為主鍵。
+class QuoteCache extends Table {
+  TextColumn get symbol => text()();
+  RealColumn get regular_price => real().nullable()();
+  IntColumn get regular_time => integer().nullable()();
+  RealColumn get pre_price => real().nullable()();
+  IntColumn get pre_time => integer().nullable()();
+  RealColumn get post_price => real().nullable()();
+  IntColumn get post_time => integer().nullable()();
+  RealColumn get previous_close => real().nullable()();
+  TextColumn get market_state => text().nullable()();
+  IntColumn get fetched_at => integer()(); // epoch 毫秒
+
+  @override
+  Set<Column> get primaryKey => <Column>{symbol};
+}
+
+/// 歷史日收盤價表，(symbol, date) 唯一。
+class HistoricalPrices extends Table {
+  TextColumn get symbol => text()();
+  IntColumn get date => integer()(); // yyyyMMdd
+  RealColumn get close_price => real()();
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+        <Column>{symbol, date},
+      ];
+}
+
+/*
+ * @author Toby
+ * @date 2026/07/11
+ * @class AppDatabase
+ * @brief 應用程式主資料庫，聚合三張表與兩個 DAO。
+ * @note 測試以 NativeDatabase.memory() 注入；正式環境用 OpenConnection() 落地檔案。
+ */
+@DriftDatabase(
+  tables: <Type>[StockTransactions, QuoteCache, HistoricalPrices],
+  daos: <Type>[TransactionDao, QuoteCacheDao, HistoricalPriceDao],
+)
+class AppDatabase extends _$AppDatabase {
+  AppDatabase(super.executor);
+
+  /// 以記憶體資料庫建立實例，供單元測試使用。
+  AppDatabase.Memory() : super(NativeDatabase.memory());
+
+  @override
+  int get schemaVersion => 1;
+}
