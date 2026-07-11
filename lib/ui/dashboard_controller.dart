@@ -178,15 +178,6 @@ class DashboardController extends ChangeNotifier {
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
 
-    // 嘗試恢復 Google 登入並靜默同步
-    final int? last_sync_ms = settings[SETTING_KEY_LAST_DRIVE_SYNC] as int?;
-    if (last_sync_ms != null) {
-      last_drive_sync_at = DateTime.fromMillisecondsSinceEpoch(last_sync_ms);
-    }
-    if (await repository.drive_sync_service.TrySilentSignIn()) {
-      notifyListeners();
-      await SyncWithDrive();
-    }
   }
 
   /// Google 同步是否已登入。
@@ -308,9 +299,6 @@ class DashboardController extends ChangeNotifier {
     await repository.quote_scheduler.PollQuotesNow();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
-    if (is_drive_signed_in) {
-      SyncWithDrive(); // 背景同步，不擋 UI
-    }
     return summary;
   }
 
@@ -333,9 +321,6 @@ class DashboardController extends ChangeNotifier {
       await repository.quote_scheduler.PollQuotesNow();
       await ReloadPortfolioHistory();
       await RefreshDividendsAndXirr();
-      if (is_drive_signed_in) {
-        SyncWithDrive(); // 背景同步，不擋 UI
-      }
     }
     return inserted;
   }
@@ -440,9 +425,6 @@ class DashboardController extends ChangeNotifier {
     await repository.quote_scheduler.PollQuotesNow();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
-    if (is_drive_signed_in) {
-      SyncWithDrive(); // 背景同步，不擋 UI
-    }
     return summary;
   }
 
@@ -460,9 +442,6 @@ class DashboardController extends ChangeNotifier {
     await ReloadHoldings();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
-    if (is_drive_signed_in) {
-      SyncWithDrive(); // 背景同步，把墓碑推上雲端
-    }
   }
 
   /// 代號搜尋（手動記帳自動完成）。

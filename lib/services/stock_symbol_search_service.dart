@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../models/stock_news_item.dart';
 import '../models/symbol_search_result.dart';
 import 'yahoo_quote_service.dart';
 
@@ -74,6 +75,78 @@ class StockSymbolSearchService {
       }
     }
     return <SymbolSearchResult>[];
+  }
+
+  /*
+   *  @fn      Future<List<StockNewsItem>> FetchNewsForSymbol(String symbol)
+   *
+   *  @brief   ( 抓取單一股票的相關新聞，供個股詳情頁顯示 )
+   *
+   *  @param   symbol - 股票代號
+   *
+   *  @return  最多 8 則新聞；失敗回傳空清單不拋例外
+   */
+  Future<List<StockNewsItem>> FetchNewsForSymbol(String symbol) async {
+    for (final String host in YahooQuoteService.QUERY_HOSTS) {
+      final Uri uri = Uri.https(host, '/v1/finance/search', <String, String>{
+        'q': symbol,
+        'quotesCount': '0',
+        'newsCount': '8',
+        'listsCount': '0',
+      });
+      try {
+        final http.Response response = await http_client.get(uri,
+            headers: <String, String>{
+              'User-Agent': YahooQuoteService.USER_AGENT,
+            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        if (response.statusCode == 429) {
+          continue; // 換備援主機
+        }
+        if (response.statusCode != 200) {
+          return <StockNewsItem>[];
+        }
+        return ParseNewsResponseJson(
+            jsonDecode(response.body) as Map<String, dynamic>);
+      } on Exception {
+        return <StockNewsItem>[];
+      }
+    }
+    return <StockNewsItem>[];
+  }
+
+  /*
+   *  @fn      static List<StockNewsItem> ParseNewsResponseJson(Map<String, dynamic> json)
+   *
+   *  @brief   ( 解析搜尋端點回應中的 news 陣列 )
+   *
+   *  @return  新聞清單，缺標題或連結的項目跳過（純函式，供單元測試）
+   */
+  static List<StockNewsItem> ParseNewsResponseJson(Map<String, dynamic> json) {
+    final List<dynamic>? news = json['news'] as List<dynamic>?;
+    if (news == null) {
+      return <StockNewsItem>[];
+    }
+    final List<StockNewsItem> items = <StockNewsItem>[];
+    for (final dynamic raw in news) {
+      if (raw is! Map<String, dynamic>) {
+        continue;
+      }
+      final String? title = raw['title'] as String?;
+      final String? link = raw['link'] as String?;
+      if (title == null || title.isEmpty || link == null || link.isEmpty) {
+        continue;
+      }
+      final num? publish_time = raw['providerPublishTime'] as num?;
+      items.add(StockNewsItem(
+        title: title,
+        publisher: (raw['publisher'] as String?) ?? '',
+        link: link,
+        published_at: publish_time != null
+            ? DateTime.fromMillisecondsSinceEpoch(publish_time.toInt() * 1000)
+            : null,
+      ));
+    }
+    return items;
   }
 
   /*

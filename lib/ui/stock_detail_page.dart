@@ -3,10 +3,12 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/ohlcv_candle.dart';
+import '../models/stock_news_item.dart';
 import '../models/stock_quote.dart';
 import 'dashboard_controller.dart';
 import 'theme/app_theme.dart';
@@ -66,6 +68,9 @@ class _StockDetailPageState extends State<StockDetailPage> {
   /// K 線與量能圖共用的縮放平移控制器（雙擊重置）
   final TransformationController chart_transform = TransformationController();
 
+  List<StockNewsItem> news_items = <StockNewsItem>[];
+  bool is_news_loading = true;
+
   @override
   void dispose() {
     chart_transform.dispose();
@@ -77,6 +82,20 @@ class _StockDetailPageState extends State<StockDetailPage> {
     super.initState();
     LoadDetailQuote();
     LoadCandles(selected_interval, selected_range);
+    LoadNews();
+  }
+
+  /// 抓取個股相關新聞。
+  Future<void> LoadNews() async {
+    final List<StockNewsItem> items =
+        await widget.controller.repository.FetchNewsForSymbol(widget.symbol);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      news_items = items;
+      is_news_loading = false;
+    });
   }
 
   /// 快取鍵：時間單位＋範圍。
@@ -211,6 +230,8 @@ class _StockDetailPageState extends State<StockDetailPage> {
                   _BuildCard(
                       colors, child: _BuildHoldingSummary(colors)),
                 ],
+                const SizedBox(height: 16),
+                _BuildCard(colors, child: _BuildNewsSection(colors)),
                 const SizedBox(height: 24),
               ],
             ),
@@ -676,6 +697,86 @@ class _StockDetailPageState extends State<StockDetailPage> {
         ),
       ],
     );
+  }
+
+  /// 相關新聞區塊：標題、來源與相對時間，點擊以瀏覽器開啟原文。
+  Widget _BuildNewsSection(AppColors colors) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text('相關新聞',
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: colors.text_primary)),
+        const SizedBox(height: 6),
+        if (is_news_loading)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(
+                child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2))),
+          )
+        else if (news_items.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text('目前沒有相關新聞',
+                style: TextStyle(fontSize: 12.5, color: colors.text_muted)),
+          )
+        else
+          for (int i = 0; i < news_items.length; i++) ...<Widget>[
+            if (i > 0) Divider(height: 1, color: colors.divider),
+            InkWell(
+              onTap: () => launchUrl(Uri.parse(news_items[i].link),
+                  mode: LaunchMode.externalApplication),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      news_items[i].title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 13.5,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          color: colors.text_primary),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      news_items[i].published_at != null
+                          ? '${news_items[i].publisher}・'
+                              '${FormatNewsTime(news_items[i].published_at!)}'
+                          : news_items[i].publisher,
+                      style: TextStyle(
+                          fontSize: 11.5, color: colors.text_muted),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+      ],
+    );
+  }
+
+  /// 新聞相對時間（X 分鐘前／X 小時前／日期）。
+  static String FormatNewsTime(DateTime time) {
+    final Duration elapsed = DateTime.now().difference(time);
+    if (elapsed.inMinutes < 60) {
+      return '${elapsed.inMinutes} 分鐘前';
+    }
+    if (elapsed.inHours < 24) {
+      return '${elapsed.inHours} 小時前';
+    }
+    if (elapsed.inDays < 7) {
+      return '${elapsed.inDays} 天前';
+    }
+    return DateFormat('yyyy/MM/dd').format(time);
   }
 
   /// 通用卡片容器。

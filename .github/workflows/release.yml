@@ -1,0 +1,92 @@
+# 發布流程：推 v* 標籤時自動編譯各平台安裝檔並附加到 GitHub Release。
+# macOS: .app 壓縮 zip；Windows: 資料夾 zip；Linux: tar.gz；Android: APK。
+# iOS 因簽章限制不提供安裝檔（請依 README 從原始碼側載）。
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build macos --release
+      - name: Package .app as zip
+        run: |
+          cd build/macos/Build/Products/Release
+          ditto -c -k --keepParent stock_portfolio_app.app StockPortfolio-macOS-${{ github.ref_name }}.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: build/macos/Build/Products/Release/StockPortfolio-macOS-${{ github.ref_name }}.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build windows --release
+      - name: Package release folder as zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath StockPortfolio-Windows-${{ github.ref_name }}.zip
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: StockPortfolio-Windows-${{ github.ref_name }}.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build linux --release
+      - name: Package bundle as tar.gz
+        run: |
+          cd build/linux/x64/release
+          tar -czf StockPortfolio-Linux-${{ github.ref_name }}.tar.gz bundle
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: build/linux/x64/release/StockPortfolio-Linux-${{ github.ref_name }}.tar.gz
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter build apk --release
+      - name: Rename APK
+        run: |
+          mv build/app/outputs/flutter-apk/app-release.apk StockPortfolio-Android-${{ github.ref_name }}.apk
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: StockPortfolio-Android-${{ github.ref_name }}.apk

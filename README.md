@@ -49,7 +49,21 @@
 
 ## 安裝教學
 
-所有平台都是從原始碼建置，共同步驟：
+### 方法一：直接下載安裝檔（推薦）
+
+到 [Releases 頁面](https://github.com/wythe5774133/stock_portfolio_app/releases) 下載對應平台的檔案：
+
+| 平台 | 檔案 | 安裝方式 |
+|---|---|---|
+| macOS | `StockPortfolio-macOS-*.zip` | 解壓縮後把 App 拖進「應用程式」。第一次開啟請對 App **按右鍵 → 打開**（未經 Apple 公證會有警告）；若仍無法開啟，終端機執行 `xattr -cr /Applications/stock_portfolio_app.app` |
+| Windows | `StockPortfolio-Windows-*.zip` | 解壓縮到任意資料夾，執行 `stock_portfolio_app.exe`（SmartScreen 警告點「其他資訊 → 仍要執行」） |
+| Linux | `StockPortfolio-Linux-*.tar.gz` | 解壓縮後執行 `bundle/stock_portfolio_app` |
+| Android | `StockPortfolio-Android-*.apk` | 傳到手機點開安裝，需允許「安裝未知的應用程式」 |
+| iOS | 無安裝檔 | Apple 簽章限制，請用下方「從原始碼建置」側載 |
+
+### 方法二：從原始碼建置
+
+共同步驟：
 
 ### 步驟 0：安裝 Flutter SDK（所有平台都要）
 

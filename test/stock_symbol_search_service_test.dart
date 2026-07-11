@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:stock_portfolio_app/models/stock_news_item.dart';
 import 'package:stock_portfolio_app/models/symbol_search_result.dart';
 import 'package:stock_portfolio_app/services/stock_symbol_search_service.dart';
 
@@ -54,6 +55,37 @@ void main() {
     test('格式不符回傳空清單', () {
       expect(
           StockSymbolSearchService.ParseSearchResponseJson(<String, dynamic>{}),
+          isEmpty);
+    });
+  });
+
+  group('ParseNewsResponseJson', () {
+    test('解析新聞：標題、來源、時間；缺連結的跳過', () {
+      final Map<String, dynamic> fixture = <String, dynamic>{
+        'news': <dynamic>[
+          <String, dynamic>{
+            'title': 'NVIDIA hits new all-time high',
+            'publisher': 'Reuters',
+            'link': 'https://example.com/nvda',
+            'providerPublishTime': 1783713600,
+          },
+          <String, dynamic>{
+            'title': '缺連結的新聞', // link 缺 → 跳過
+            'publisher': 'X',
+          },
+        ],
+      };
+      final List<StockNewsItem> items =
+          StockSymbolSearchService.ParseNewsResponseJson(fixture);
+      expect(items.length, 1);
+      expect(items.first.title, contains('NVIDIA'));
+      expect(items.first.publisher, 'Reuters');
+      expect(items.first.published_at, isNotNull);
+    });
+
+    test('無 news 欄位回傳空清單', () {
+      expect(
+          StockSymbolSearchService.ParseNewsResponseJson(<String, dynamic>{}),
           isEmpty);
     });
   });

@@ -8,6 +8,7 @@ import '../database/tombstone_dao.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/portfolio_snapshot.dart';
+import '../models/stock_news_item.dart';
 import '../models/stock_quote.dart';
 import '../models/stock_transaction.dart';
 import '../models/ohlcv_candle.dart';
@@ -235,6 +236,11 @@ class PortfolioRepository {
   /// 以關鍵字搜尋股票代號（手動記帳的自動完成）。
   Future<List<SymbolSearchResult>> SearchSymbols(String query) {
     return symbol_search_service.SearchSymbols(query);
+  }
+
+  /// 抓取個股相關新聞（詳情頁用）；失敗回傳空清單。
+  Future<List<StockNewsItem>> FetchNewsForSymbol(String symbol) {
+    return symbol_search_service.FetchNewsForSymbol(symbol);
   }
 
   /// 查詢單一代號的即時報價（手動記帳時預帶現價用）；失敗回傳 null。

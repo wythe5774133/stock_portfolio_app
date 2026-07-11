@@ -157,13 +157,6 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               SectionCard(
-                title: '雲端同步',
-                subtitle: '資料存在你自己 Google Drive 的 App 專屬隱藏空間，我們沒有伺服器',
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-                child: _BuildDriveSyncSection(context, colors),
-              ),
-              const SizedBox(height: 14),
-              SectionCard(
                 title: '關於',
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
                 child: Column(
@@ -187,87 +180,6 @@ class SettingsPage extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  /// 雲端同步區塊：未登入顯示登入按鈕，已登入顯示帳號、同步狀態與操作。
-  Widget _BuildDriveSyncSection(BuildContext context, AppColors colors) {
-    if (!controller.is_drive_signed_in) {
-      return Column(
-        children: <Widget>[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.cloud_outlined, size: 22),
-            title: const Text('使用 Google 登入',
-                style: TextStyle(fontSize: 14.5)),
-            subtitle: Text(
-              '登入後交易、追蹤清單與設定會自動同步到你的 Google Drive，'
-              '其他裝置登入同一帳號即可雙向同步（刪除也會同步，不會復活）',
-              style: TextStyle(fontSize: 11.5, color: colors.text_muted),
-            ),
-            onTap: () => _SignInToDrive(context),
-          ),
-        ],
-      );
-    }
-
-    return Column(
-      children: <Widget>[
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.cloud_done_outlined, size: 22),
-          title: Text(controller.drive_account_email ?? '',
-              style: const TextStyle(fontSize: 14.5)),
-          subtitle: Text(
-            controller.last_drive_sync_at != null
-                ? '上次同步：'
-                    '${DateFormat('yyyy/MM/dd HH:mm').format(controller.last_drive_sync_at!)}'
-                : '尚未同步',
-            style: TextStyle(fontSize: 11.5, color: colors.text_muted),
-          ),
-          trailing: controller.is_drive_syncing
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : null,
-        ),
-        Row(
-          children: <Widget>[
-            TextButton.icon(
-              onPressed: controller.is_drive_syncing
-                  ? null
-                  : () => _SyncDriveNow(context),
-              icon: const Icon(Icons.sync, size: 16),
-              label: const Text('立即同步', style: TextStyle(fontSize: 13)),
-            ),
-            const SizedBox(width: 8),
-            TextButton.icon(
-              onPressed: () => controller.SignOutGoogleDrive(),
-              icon: const Icon(Icons.logout, size: 16),
-              label: const Text('登出', style: TextStyle(fontSize: 13)),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  /// 觸發 Google 登入並回報結果。
-  Future<void> _SignInToDrive(BuildContext context) async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool signed_in = await controller.SignInToGoogleDrive();
-    messenger.showSnackBar(SnackBar(
-      content: Text(signed_in ? 'Google 登入成功，已完成首次同步' : '登入未完成'),
-    ));
-  }
-
-  /// 手動觸發同步並回報結果。
-  Future<void> _SyncDriveNow(BuildContext context) async {
-    final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
-    final bool ok = await controller.SyncWithDrive();
-    messenger.showSnackBar(SnackBar(
-      content: Text(ok ? '同步完成' : '同步失敗，請檢查網路後再試'),
-    ));
   }
 
   /// 匯出備份：產生 JSON 後開存檔對話框。
