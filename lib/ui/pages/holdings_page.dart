@@ -45,7 +45,7 @@ class HoldingsPage extends StatelessWidget {
                 title_padding: const EdgeInsets.fromLTRB(20, 18, 12, 6),
                 trailing: TextButton.icon(
                   onPressed: () => PickAndImportCsvFile(context, controller),
-                  icon: const Icon(Icons.upload_file, size: 16),
+                  icon: const Icon(Icons.download, size: 16),
                   label: const Text('匯入 CSV', style: TextStyle(fontSize: 13)),
                 ),
                 child: HoldingListView(

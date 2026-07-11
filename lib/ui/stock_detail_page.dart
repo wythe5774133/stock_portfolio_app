@@ -63,6 +63,15 @@ class _StockDetailPageState extends State<StockDetailPage> {
   bool is_chart_loading = true;
   bool is_chart_unavailable = false;
 
+  /// K 線與量能圖共用的縮放平移控制器（雙擊重置）
+  final TransformationController chart_transform = TransformationController();
+
+  @override
+  void dispose() {
+    chart_transform.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +105,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
       });
       return;
     }
+    chart_transform.value = Matrix4.identity(); // 換資料時重置縮放
     setState(() {
       selected_interval = interval;
       selected_range = range;
@@ -173,9 +183,23 @@ class _StockDetailPageState extends State<StockDetailPage> {
                           ),
                         )
                       else ...<Widget>[
-                        _BuildCandlestickChart(candles),
-                        const SizedBox(height: 8),
-                        _BuildVolumeChart(candles),
+                        GestureDetector(
+                          onDoubleTap: () =>
+                              chart_transform.value = Matrix4.identity(),
+                          child: Column(
+                            children: <Widget>[
+                              _BuildCandlestickChart(candles),
+                              const SizedBox(height: 8),
+                              _BuildVolumeChart(candles),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '捏合或滾輪縮放・拖曳平移・雙擊還原',
+                          style: TextStyle(
+                              fontSize: 11, color: colors.text_muted),
+                        ),
                       ],
                     ],
                   ),
@@ -324,6 +348,13 @@ class _StockDetailPageState extends State<StockDetailPage> {
     return SizedBox(
       height: 320,
       child: CandlestickChart(
+        transformationConfig: FlTransformationConfig(
+          scaleAxis: FlScaleAxis.horizontal,
+          minScale: 1,
+          maxScale: 20,
+          trackpadScrollCausesScale: true,
+          transformationController: chart_transform,
+        ),
         CandlestickChartData(
           minY: min_low - y_padding,
           maxY: max_high + y_padding,
@@ -459,6 +490,13 @@ class _StockDetailPageState extends State<StockDetailPage> {
     return SizedBox(
       height: 80,
       child: BarChart(
+        transformationConfig: FlTransformationConfig(
+          scaleAxis: FlScaleAxis.horizontal,
+          minScale: 1,
+          maxScale: 20,
+          trackpadScrollCausesScale: true,
+          transformationController: chart_transform,
+        ),
         BarChartData(
           maxY: max_volume * 1.05,
           barGroups: <BarChartGroupData>[

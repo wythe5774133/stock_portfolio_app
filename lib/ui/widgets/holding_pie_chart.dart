@@ -207,21 +207,30 @@ class HoldingPieChart extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 SizedBox(
-                  width: 48,
-                  child: Text(
-                    '${(positive_entries[i].value / total * 100).toStringAsFixed(1)}%',
-                    textAlign: TextAlign.right,
-                    style: const TextStyle(
-                        fontSize: 12, fontWeight: FontWeight.w600),
+                  width: 50,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      '${(positive_entries[i].value / total * 100).toStringAsFixed(1)}%',
+                      maxLines: 1,
+                      style: const TextStyle(
+                          fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
+                const SizedBox(width: 6),
                 SizedBox(
-                  width: 82,
-                  child: Text(
-                    money.format(positive_entries[i].value),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                        fontSize: 12, color: colors.text_secondary),
+                  width: 80,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      money.format(positive_entries[i].value),
+                      maxLines: 1,
+                      style: TextStyle(
+                          fontSize: 12, color: colors.text_secondary),
+                    ),
                   ),
                 ),
               ],

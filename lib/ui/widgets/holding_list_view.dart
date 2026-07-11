@@ -184,19 +184,18 @@ class _HoldingExpandableRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
-              Text(
+              _BuildSingleLineText(
                 row.current_price != null
                     ? money.format(row.current_price)
                     : '—',
-                style: const TextStyle(
-                    fontSize: 14, fontWeight: FontWeight.w600),
+                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
-              Text(
+              _BuildSingleLineText(
                 row.day_change_percent != null
                     ? '${row.day_change_percent! >= 0 ? '+' : ''}'
                         '${row.day_change_percent!.toStringAsFixed(2)}%'
                     : row.price_source_label,
-                style: TextStyle(
+                TextStyle(
                   fontSize: 11,
                   color: row.day_change_percent != null
                       ? profit_colors
@@ -212,22 +211,31 @@ class _HoldingExpandableRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
-              Text(
+              _BuildSingleLineText(
                 '$sign${money.format(row.unrealized_pnl)}',
-                style: TextStyle(
+                TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   color: pnl_color,
                 ),
               ),
-              Text(
+              _BuildSingleLineText(
                 '$sign${row.unrealized_pnl_percent.toStringAsFixed(2)}%',
-                style: TextStyle(fontSize: 11, color: pnl_color),
+                TextStyle(fontSize: 11, color: pnl_color),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// 單行文字：過長時等比例縮小而非換行（手機數字防跑版）。
+  static Widget _BuildSingleLineText(String text, TextStyle style) {
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerRight,
+      child: Text(text, maxLines: 1, style: style),
     );
   }
 

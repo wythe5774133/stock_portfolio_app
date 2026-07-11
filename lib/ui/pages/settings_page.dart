@@ -123,7 +123,7 @@ class SettingsPage extends StatelessWidget {
                     const Divider(height: 1),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.upload_file, size: 20),
+                      leading: const Icon(Icons.download, size: 20),
                       title: const Text('匯入交易 CSV',
                           style: TextStyle(fontSize: 14.5)),
                       subtitle: Text('Yahoo Finance 匯出格式，自動去重',
@@ -134,7 +134,7 @@ class SettingsPage extends StatelessWidget {
                     ),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.save_alt, size: 20),
+                      leading: const Icon(Icons.upload, size: 20),
                       title: const Text('匯出備份',
                           style: TextStyle(fontSize: 14.5)),
                       subtitle: Text('交易、追蹤清單與設定打包成一個檔案',
