@@ -13,6 +13,7 @@ import '../models/stock_quote.dart';
 import '../models/stock_transaction.dart';
 import '../models/symbol_search_result.dart';
 import '../services/app_settings_store.dart';
+import '../services/backup_service.dart';
 import '../services/csv_transaction_importer.dart';
 import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
@@ -271,6 +272,52 @@ class DashboardController extends ChangeNotifier {
   Future<void> RemoveFromWatchlist(String symbol) async {
     await repository.RemoveFromWatchlist(symbol);
     await ReloadWatchlist();
+  }
+
+  /// 匯出備份 JSON（交易＋追蹤清單＋設定）。
+  Future<String> ExportBackupJson() async {
+    final Map<String, dynamic> settings = await settings_store.LoadSettings();
+    return repository.backup_service.BuildBackupJson(settings);
+  }
+
+  /*
+   *  @fn      Future<BackupRestoreSummary> ImportBackupJson(String backup_json)
+   *
+   *  @brief   ( 匯入備份並合併：交易去重、追蹤取聯集、設定套用備份值 )
+   *
+   *  @return  合併統計；格式不符會拋出 FormatException 由 UI 顯示
+   */
+  Future<BackupRestoreSummary> ImportBackupJson(String backup_json) async {
+    final BackupRestoreSummary summary =
+        await repository.backup_service.RestoreFromBackupJson(backup_json);
+
+    // 套用備份內的設定（存在才套用）
+    final Map<String, dynamic> settings = summary.settings;
+    if (settings.containsKey(SETTING_KEY_COLOR_CONVENTION)) {
+      color_convention = ParseProfitColorConvention(
+          settings[SETTING_KEY_COLOR_CONVENTION] as String?);
+      await settings_store.SaveSetting(SETTING_KEY_COLOR_CONVENTION,
+          settings[SETTING_KEY_COLOR_CONVENTION]);
+    }
+    if (settings.containsKey(SETTING_KEY_THEME_MODE)) {
+      theme_mode =
+          ParseAppThemeMode(settings[SETTING_KEY_THEME_MODE] as String?);
+      await settings_store.SaveSetting(
+          SETTING_KEY_THEME_MODE, settings[SETTING_KEY_THEME_MODE]);
+    }
+    if (settings.containsKey(SETTING_KEY_DIVIDEND_TRACKING)) {
+      dividend_tracking_enabled =
+          (settings[SETTING_KEY_DIVIDEND_TRACKING] as bool?) ?? false;
+      await settings_store.SaveSetting(SETTING_KEY_DIVIDEND_TRACKING,
+          settings[SETTING_KEY_DIVIDEND_TRACKING]);
+    }
+
+    await ReloadHoldings();
+    await ReloadWatchlist();
+    await repository.quote_scheduler.PollQuotesNow();
+    await ReloadPortfolioHistory();
+    await RefreshDividendsAndXirr();
+    return summary;
   }
 
   /// 切換深淺主題並持久化。

@@ -13,7 +13,7 @@ import 'package:stock_portfolio_app/database/app_database.dart';
 import 'package:stock_portfolio_app/logic/portfolio_repository.dart';
 import 'package:stock_portfolio_app/services/app_settings_store.dart';
 import 'package:stock_portfolio_app/ui/dashboard_controller.dart';
-import 'package:stock_portfolio_app/ui/dashboard_page.dart';
+import 'package:stock_portfolio_app/ui/home_shell.dart';
 
 /// 產生單檔 v7 報價 JSON。
 Map<String, dynamic> BuildV7Quote(String symbol, double price) {
@@ -104,7 +104,7 @@ void main() {
   Widget BuildTestApp() {
     return ChangeNotifierProvider<DashboardController>.value(
       value: controller,
-      child: const MaterialApp(home: DashboardPage()),
+      child: const MaterialApp(home: HomeShell()),
     );
   }
 
@@ -116,7 +116,10 @@ void main() {
     await tester.pumpWidget(BuildTestApp());
     await tester.pump();
 
-    expect(find.text('尚無持倉，請先匯入交易紀錄 CSV'), findsOneWidget);
+    // 切到持倉分頁
+    await tester.tap(find.text('持倉'));
+    await tester.pumpAndSettle();
+    expect(find.text('尚無持倉，匯入交易 CSV 或點「記一筆」開始'), findsOneWidget);
     expect(find.text('匯入 CSV'), findsOneWidget);
   });
 
@@ -139,18 +142,18 @@ void main() {
     await tester.pumpWidget(BuildTestApp());
     await tester.pump();
 
-    // 統計卡片
+    // 總覽分頁：統計卡片與圖表
     expect(find.text('總資產'), findsOneWidget);
     expect(find.text('總成本'), findsWidgets);
     expect(find.text('未實現損益'), findsWidgets);
     expect(find.text('已實現損益'), findsWidgets);
-
-    // 三種圖表區塊
     expect(find.text('資產曲線'), findsOneWidget);
     expect(find.text('持倉配置（依市值）'), findsOneWidget);
     expect(find.text('成本配置（依投入成本）'), findsOneWidget);
 
-    // 持倉列表與成本方法標示
+    // 切到持倉分頁：列表與成本方法標示
+    await tester.tap(find.text('持倉').first);
+    await tester.pumpAndSettle();
     expect(find.text('持倉明細'), findsOneWidget);
     expect(find.textContaining('加權平均法'), findsOneWidget);
     expect(find.text('NVDA'), findsWidgets);
@@ -178,6 +181,9 @@ void main() {
 
     await tester.pumpWidget(BuildTestApp());
     await tester.pump();
+
+    await tester.tap(find.text('持倉').first);
+    await tester.pumpAndSettle();
 
     // 展開 NVDA 的持倉列（鎖定 ExpansionTile，避免點到圓餅圖圖例的代號文字）
     final Finder nvda_tile = find.widgetWithText(ExpansionTile, 'NVDA');
@@ -265,6 +271,8 @@ void main() {
     await tester.pumpWidget(BuildTestApp());
     await tester.pump();
 
+    await tester.tap(find.text('持倉').first);
+    await tester.pumpAndSettle();
     expect(find.text('已清倉'), findsOneWidget);
     expect(find.text('TSLA'), findsOneWidget);
     // 已實現損益 (150-100)*2 = +100

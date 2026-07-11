@@ -11,6 +11,7 @@ import '../models/stock_quote.dart';
 import '../models/stock_transaction.dart';
 import '../models/ohlcv_candle.dart';
 import '../models/symbol_search_result.dart';
+import '../services/backup_service.dart';
 import '../services/csv_transaction_importer.dart';
 import '../services/dividend_service.dart';
 import '../services/historical_price_service.dart';
@@ -48,6 +49,7 @@ class PortfolioRepository {
   final HistoricalPriceService historical_price_service;
   final StockSymbolSearchService symbol_search_service;
   final DividendService dividend_service;
+  late final BackupService backup_service;
   late final QuotePollingScheduler quote_scheduler;
 
   PortfolioRepository({
@@ -67,6 +69,7 @@ class PortfolioRepository {
           historical_price_dao: database.historicalPriceDao,
           http_client: http_client,
         ) {
+    backup_service = BackupService(database: database);
     quote_scheduler = QuotePollingScheduler(
       quote_service: quote_service,
       quote_cache_dao: database.quoteCacheDao,

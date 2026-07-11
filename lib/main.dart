@@ -9,7 +9,7 @@ import 'database/database_connection.dart';
 import 'logic/portfolio_repository.dart';
 import 'services/market_session_resolver.dart';
 import 'ui/dashboard_controller.dart';
-import 'ui/dashboard_page.dart';
+import 'ui/home_shell.dart';
 import 'ui/theme/app_theme.dart';
 
 void main() {
@@ -48,7 +48,7 @@ class StockPortfolioApp extends StatelessWidget {
             theme: BuildAppTheme(Brightness.light),
             darkTheme: BuildAppTheme(Brightness.dark),
             themeMode: ConvertToMaterialThemeMode(controller.theme_mode),
-            home: const DashboardPage(),
+            home: const HomeShell(),
           );
         },
       ),
