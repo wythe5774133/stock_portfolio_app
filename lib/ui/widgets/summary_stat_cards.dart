@@ -26,6 +26,7 @@ class SummaryStatCards extends StatelessWidget {
   final double total_day_change_percent;
   final double total_dividend_income;
   final double? portfolio_xirr; // null = 資料不足
+  final bool show_dividend_card; // 股息追蹤關閉時隱藏股息卡片
   final ProfitColorScheme profit_colors;
 
   const SummaryStatCards({
@@ -39,6 +40,7 @@ class SummaryStatCards extends StatelessWidget {
     required this.total_day_change_percent,
     required this.total_dividend_income,
     required this.portfolio_xirr,
+    required this.show_dividend_card,
     required this.profit_colors,
   });
 
@@ -52,9 +54,10 @@ class SummaryStatCards extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        // 依可用寬度決定每列卡片數：寬 → 6 張一列，窄 → 自動換行
+        // 依可用寬度決定每列卡片數：寬 → 一列排滿，窄 → 自動換行
+        final int card_count = show_dividend_card ? 6 : 5;
         final double card_width = constraints.maxWidth >= 1080
-            ? (constraints.maxWidth - 5 * 12) / 6
+            ? (constraints.maxWidth - (card_count - 1) * 12) / card_count
             : constraints.maxWidth >= 700
                 ? (constraints.maxWidth - 2 * 12) / 3
                 : (constraints.maxWidth - 12) / 2;
@@ -99,13 +102,14 @@ class SummaryStatCards extends StatelessWidget {
               value_color:
                   profit_colors.ResolveColorForValue(total_realized_pnl),
             ),
-            _BuildStatCard(
-              colors: colors,
-              width: card_width,
-              title: '累計股息',
-              value: money.format(total_dividend_income),
-              subtitle: '依除息日持股計算',
-            ),
+            if (show_dividend_card)
+              _BuildStatCard(
+                colors: colors,
+                width: card_width,
+                title: '累計股息',
+                value: money.format(total_dividend_income),
+                subtitle: '依除息日持股計算',
+              ),
             _BuildStatCard(
               colors: colors,
               width: card_width,
@@ -114,7 +118,7 @@ class SummaryStatCards extends StatelessWidget {
                   ? '${portfolio_xirr! >= 0 ? '+' : ''}'
                       '${(portfolio_xirr! * 100).toStringAsFixed(2)}%'
                   : '—',
-              subtitle: '資金加權・含股息',
+              subtitle: show_dividend_card ? '資金加權・含股息' : '資金加權',
               value_color: portfolio_xirr != null
                   ? profit_colors.ResolveColorForValue(portfolio_xirr!)
                   : null,

@@ -254,6 +254,14 @@ class YahooQuoteService {
       previous_close: _ReadDouble(json['regularMarketPreviousClose']),
       fetched_at: fetched_at,
       market_state: json['marketState'] as String?,
+      open_price: _ReadDouble(json['regularMarketOpen']),
+      day_high: _ReadDouble(json['regularMarketDayHigh']),
+      day_low: _ReadDouble(json['regularMarketDayLow']),
+      volume: _ReadDouble(json['regularMarketVolume']),
+      fifty_two_week_high: _ReadDouble(json['fiftyTwoWeekHigh']),
+      fifty_two_week_low: _ReadDouble(json['fiftyTwoWeekLow']),
+      market_cap: _ReadDouble(json['marketCap']),
+      trailing_pe: _ReadDouble(json['trailingPE']),
     );
   }
 

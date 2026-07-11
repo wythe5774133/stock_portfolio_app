@@ -3,6 +3,7 @@
 
 import 'package:flutter/foundation.dart';
 
+import '../database/app_database.dart' show WatchlistSymbol;
 import '../logic/portfolio_calculator.dart';
 import '../logic/portfolio_repository.dart';
 import '../models/holding_position.dart';
@@ -87,6 +88,7 @@ class HoldingDisplayRow {
 class DashboardController extends ChangeNotifier {
   static const String SETTING_KEY_COLOR_CONVENTION = 'profit_color_convention';
   static const String SETTING_KEY_THEME_MODE = 'theme_mode';
+  static const String SETTING_KEY_DIVIDEND_TRACKING = 'dividend_tracking';
 
   final PortfolioRepository repository;
   final AppSettingsStore settings_store;
@@ -98,9 +100,17 @@ class DashboardController extends ChangeNotifier {
   ProfitColorConvention color_convention = ProfitColorConvention.us;
   AppThemeMode theme_mode = AppThemeMode.system;
 
+  // 股息追蹤開關：預設關閉。
+  // 券商若開啟股息再投資（DRIP），股息已以碎股買入形式出現在交易紀錄，
+  // 再計股息收入會重複計算，因此由使用者依自身券商設定決定是否開啟。
+  bool dividend_tracking_enabled = false;
+
   // 股息與年化報酬率
   Map<String, double> dividend_income_by_symbol = <String, double>{};
   double? portfolio_xirr; // 資金加權年化報酬率（null = 資料不足）
+
+  // 自選股追蹤清單
+  List<WatchlistSymbol> watchlist = <WatchlistSymbol>[];
 
   // 資產曲線：時間範圍與大盤比較狀態
   CurveRange curve_range = CurveRange.all;
@@ -148,8 +158,11 @@ class DashboardController extends ChangeNotifier {
         settings[SETTING_KEY_COLOR_CONVENTION] as String?);
     theme_mode =
         ParseAppThemeMode(settings[SETTING_KEY_THEME_MODE] as String?);
+    dividend_tracking_enabled =
+        (settings[SETTING_KEY_DIVIDEND_TRACKING] as bool?) ?? false;
 
     await ReloadHoldings();
+    await ReloadWatchlist();
     is_loading = false;
     notifyListeners();
 
@@ -159,11 +172,22 @@ class DashboardController extends ChangeNotifier {
   }
 
   /// 重新計算股息收入與 XIRR（匯入、記帳後也會呼叫）。
+  /// 股息追蹤關閉時不抓配息資料，XIRR 也不含股息（避免 DRIP 重複計算）。
   Future<void> RefreshDividendsAndXirr() async {
-    dividend_income_by_symbol = await repository.GetDividendIncomeBySymbol();
+    dividend_income_by_symbol = dividend_tracking_enabled
+        ? await repository.GetDividendIncomeBySymbol()
+        : <String, double>{};
     portfolio_xirr = await repository.CalculatePortfolioXirr(
         total_market_value, dividend_income_by_symbol);
     notifyListeners();
+  }
+
+  /// 切換股息追蹤開關並持久化，隨即重算股息與 XIRR。
+  Future<void> SwitchDividendTracking(bool enabled) async {
+    dividend_tracking_enabled = enabled;
+    notifyListeners();
+    await settings_store.SaveSetting(SETTING_KEY_DIVIDEND_TRACKING, enabled);
+    await RefreshDividendsAndXirr();
   }
 
   /// 重新載入持倉清單。
@@ -225,6 +249,28 @@ class DashboardController extends ChangeNotifier {
       await RefreshDividendsAndXirr();
     }
     return inserted;
+  }
+
+  /// 重新載入追蹤清單。
+  Future<void> ReloadWatchlist() async {
+    watchlist = await repository.GetWatchlist();
+    notifyListeners();
+  }
+
+  /// 加入自選追蹤並立即抓報價；回傳 false 表示已在清單中。
+  Future<bool> AddToWatchlist(String symbol, String name) async {
+    final bool added = await repository.AddToWatchlist(symbol, name);
+    if (added) {
+      await ReloadWatchlist();
+      await repository.quote_scheduler.PollQuotesNow();
+    }
+    return added;
+  }
+
+  /// 移除自選追蹤。
+  Future<void> RemoveFromWatchlist(String symbol) async {
+    await repository.RemoveFromWatchlist(symbol);
+    await ReloadWatchlist();
   }
 
   /// 切換深淺主題並持久化。

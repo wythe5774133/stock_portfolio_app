@@ -13,11 +13,13 @@ import 'dashboard_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
 import 'widgets/add_transaction_dialog.dart';
+import 'widgets/add_watchlist_dialog.dart';
 import 'widgets/asset_curve_section.dart';
 import 'widgets/holding_list_view.dart';
 import 'widgets/holding_pie_chart.dart';
 import 'widgets/quote_status_banner.dart';
 import 'widgets/summary_stat_cards.dart';
+import 'widgets/watchlist_card.dart';
 
 /*
  * @author  Toby
@@ -76,6 +78,7 @@ class DashboardPage extends StatelessWidget {
                 total_day_change_percent: controller.total_day_change_percent,
                 total_dividend_income: controller.total_dividend_income,
                 portfolio_xirr: controller.portfolio_xirr,
+                show_dividend_card: controller.dividend_tracking_enabled,
                 profit_colors: controller.profit_colors,
               ),
               const SizedBox(height: 16),
@@ -142,7 +145,22 @@ class DashboardPage extends StatelessWidget {
                 child: HoldingListView(
                   rows: rows,
                   profit_colors: controller.profit_colors,
+                  controller: controller,
                 ),
+              ),
+              const SizedBox(height: 16),
+              _BuildSectionCard(
+                context: context,
+                title: '追蹤清單',
+                subtitle: '不需持有也能關注，點列查看 K 線與詳情',
+                padding: EdgeInsets.zero,
+                title_padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+                trailing: TextButton.icon(
+                  onPressed: () => AddWatchlistDialog.Show(context, controller),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('追蹤', style: TextStyle(fontSize: 13)),
+                ),
+                child: WatchlistCard(controller: controller),
               ),
               if (controller.GetClosedPositions().isNotEmpty) ...<Widget>[
                 const SizedBox(height: 16),
@@ -175,6 +193,7 @@ class DashboardPage extends StatelessWidget {
           onPressed: () => controller.RefreshQuotesNow(),
           icon: const Icon(Icons.refresh, size: 21),
         ),
+        _BuildSettingsMenu(controller),
         _BuildThemeModeMenu(context, controller),
         _BuildColorConventionMenu(controller),
         const SizedBox(width: 8),
@@ -198,6 +217,35 @@ class DashboardPage extends StatelessWidget {
             foregroundColor: colors.primary_button_foreground,
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 一般設定選單（目前含股息追蹤開關）。
+  Widget _BuildSettingsMenu(DashboardController controller) {
+    return PopupMenuButton<String>(
+      tooltip: '設定',
+      icon: const Icon(Icons.settings_outlined, size: 21),
+      onSelected: (String key) {
+        if (key == 'dividend_tracking') {
+          controller
+              .SwitchDividendTracking(!controller.dividend_tracking_enabled);
+        }
+      },
+      itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+        CheckedPopupMenuItem<String>(
+          value: 'dividend_tracking',
+          checked: controller.dividend_tracking_enabled,
+          child: const Text('股息追蹤'),
+        ),
+        const PopupMenuItem<String>(
+          enabled: false,
+          height: 40,
+          child: Text(
+            '券商有開股息再投資（DRIP）時請保持關閉，\n避免股息被重複計算',
+            style: TextStyle(fontSize: 11.5),
           ),
         ),
       ],

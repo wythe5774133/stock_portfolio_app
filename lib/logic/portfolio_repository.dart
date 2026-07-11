@@ -9,6 +9,7 @@ import '../models/market_session.dart';
 import '../models/portfolio_snapshot.dart';
 import '../models/stock_quote.dart';
 import '../models/stock_transaction.dart';
+import '../models/ohlcv_candle.dart';
 import '../models/symbol_search_result.dart';
 import '../services/csv_transaction_importer.dart';
 import '../services/dividend_service.dart';
@@ -94,13 +95,40 @@ class PortfolioRepository {
     return database.transactionDao.GetTransactionsBySymbol(symbol);
   }
 
-  /// 取得需要追蹤報價的代號清單（目前仍持有的優先，含已清倉代號則略過）。
+  /// 取得需要追蹤報價的代號清單：持有中的個股 ∪ 自選追蹤清單。
   Future<List<String>> GetTrackedSymbols() async {
     final List<HoldingPosition> positions = await GetHoldingPositions();
-    return positions
-        .where((HoldingPosition p) => !p.is_closed)
-        .map((HoldingPosition p) => p.symbol)
-        .toList();
+    final List<WatchlistSymbol> watchlist =
+        await database.watchlistDao.GetAllSymbols();
+    final Set<String> symbols = <String>{
+      ...positions
+          .where((HoldingPosition p) => !p.is_closed)
+          .map((HoldingPosition p) => p.symbol),
+      ...watchlist.map((WatchlistSymbol w) => w.symbol),
+    };
+    return symbols.toList();
+  }
+
+  /// 取得自選追蹤清單（依加入時間排序）。
+  Future<List<WatchlistSymbol>> GetWatchlist() {
+    return database.watchlistDao.GetAllSymbols();
+  }
+
+  /// 加入自選追蹤；回傳 true 表示實際新增（false = 已在清單中）。
+  Future<bool> AddToWatchlist(String symbol, String name) {
+    return database.watchlistDao.AddSymbol(
+        symbol, name, DateTime.now().millisecondsSinceEpoch);
+  }
+
+  /// 移除自選追蹤。
+  Future<void> RemoveFromWatchlist(String symbol) {
+    return database.watchlistDao.RemoveSymbol(symbol);
+  }
+
+  /// 抓取個股詳情頁的 K 線資料（日/週/月）；失敗回傳 null。
+  Future<List<OhlcvCandle>?> FetchOhlcvCandles(
+      String symbol, CandleInterval interval) {
+    return historical_price_service.FetchOhlcvCandles(symbol, interval);
   }
 
   /*

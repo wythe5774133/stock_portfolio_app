@@ -60,6 +60,7 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   drift_dev: ^2.34.2+1
   build_runner: ^2.15.1
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -103,3 +104,17 @@ flutter:
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
 
+
+# App icon 產生設定（來源圖由 tool 產生，見 assets/icon/）
+flutter_launcher_icons:
+  image_path: "assets/icon/app_icon_full.png"
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  macos:
+    generate: true
+    image_path: "assets/icon/app_icon_macos.png"
+  windows:
+    generate: true
+    image_path: "assets/icon/app_icon_full.png"
+    icon_size: 256

@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../database/historical_price_dao.dart';
+import '../models/ohlcv_candle.dart';
 import 'market_session_resolver.dart';
 import 'yahoo_quote_service.dart';
 
@@ -157,6 +158,113 @@ class HistoricalPriceService {
       closes_by_date[date] = close_raw.toDouble();
     }
     return closes_by_date;
+  }
+
+  /*
+   *  @fn      Future<List<OhlcvCandle>?> FetchOhlcvCandles(String symbol, CandleInterval interval)
+   *
+   *  @brief   ( 抓取 K 線圖用的開高低收與成交量序列 )
+   *
+   *  @param   symbol - 股票代號
+   *  @param   interval - 日K（近6月）/ 週K（近2年）/ 月K（近10年）
+   *
+   *  @return  由舊到新的蠟燭清單；請求失敗回傳 null
+   */
+  Future<List<OhlcvCandle>?> FetchOhlcvCandles(
+      String symbol, CandleInterval interval) async {
+    final (String, String) range_and_interval = switch (interval) {
+      CandleInterval.daily => ('6mo', '1d'),
+      CandleInterval.weekly => ('2y', '1wk'),
+      CandleInterval.monthly => ('10y', '1mo'),
+    };
+
+    for (final String host in YahooQuoteService.QUERY_HOSTS) {
+      final Uri uri =
+          Uri.https(host, '/v8/finance/chart/$symbol', <String, String>{
+        'range': range_and_interval.$1,
+        'interval': range_and_interval.$2,
+      });
+      try {
+        final http.Response response = await http_client.get(uri,
+            headers: <String, String>{
+              'User-Agent': YahooQuoteService.USER_AGENT,
+            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        if (response.statusCode == 429) {
+          continue; // 換備援主機
+        }
+        if (response.statusCode != 200) {
+          return null;
+        }
+        return ParseOhlcvChartJson(
+            jsonDecode(response.body) as Map<String, dynamic>);
+      } on Exception {
+        return null;
+      }
+    }
+    return null;
+  }
+
+  /*
+   *  @fn      static List<OhlcvCandle> ParseOhlcvChartJson(Map<String, dynamic> json)
+   *
+   *  @brief   ( 解析 chart 回應的開高低收與成交量為蠟燭清單 )
+   *
+   *  @param   json - chart 端點完整回應
+   *
+   *  @return  由舊到新的蠟燭清單；任一欄位缺值的 K 線跳過（純函式，供單元測試）
+   */
+  static List<OhlcvCandle> ParseOhlcvChartJson(Map<String, dynamic> json) {
+    MarketSessionResolver.InitializeTimeZoneDatabase();
+    final tz.Location new_york = tz.getLocation('America/New_York');
+
+    final List<OhlcvCandle> candles = <OhlcvCandle>[];
+    final List<dynamic>? results =
+        (json['chart'] as Map<String, dynamic>?)?['result'] as List<dynamic>?;
+    if (results == null || results.isEmpty) {
+      return candles;
+    }
+    final Map<String, dynamic> result = results.first as Map<String, dynamic>;
+    final List<dynamic>? timestamps = result['timestamp'] as List<dynamic>?;
+    final Map<String, dynamic>? quote =
+        (((result['indicators'] as Map<String, dynamic>?)?['quote']
+                as List<dynamic>?)
+            ?.firstOrNull) as Map<String, dynamic>?;
+    if (timestamps == null || quote == null) {
+      return candles;
+    }
+    final List<dynamic>? opens = quote['open'] as List<dynamic>?;
+    final List<dynamic>? highs = quote['high'] as List<dynamic>?;
+    final List<dynamic>? lows = quote['low'] as List<dynamic>?;
+    final List<dynamic>? closes = quote['close'] as List<dynamic>?;
+    final List<dynamic>? volumes = quote['volume'] as List<dynamic>?;
+    if (opens == null || highs == null || lows == null || closes == null) {
+      return candles;
+    }
+
+    for (int i = 0; i < timestamps.length; i++) {
+      final dynamic open = i < opens.length ? opens[i] : null;
+      final dynamic high = i < highs.length ? highs[i] : null;
+      final dynamic low = i < lows.length ? lows[i] : null;
+      final dynamic close = i < closes.length ? closes[i] : null;
+      final dynamic volume =
+          volumes != null && i < volumes.length ? volumes[i] : 0;
+      if (open is! num || high is! num || low is! num || close is! num) {
+        continue; // 缺值 K 線跳過
+      }
+      final tz.TZDateTime new_york_time = tz.TZDateTime.fromMillisecondsSinceEpoch(
+          new_york, (timestamps[i] as num).toInt() * 1000);
+      candles.add(OhlcvCandle(
+        date: new_york_time.year * 10000 +
+            new_york_time.month * 100 +
+            new_york_time.day,
+        open: open.toDouble(),
+        high: high.toDouble(),
+        low: low.toDouble(),
+        close: close.toDouble(),
+        volume: volume is num ? volume.toDouble() : 0,
+      ));
+    }
+    return candles;
   }
 
   /// yyyyMMdd 轉美東時區當日 00:00 的 epoch 秒。

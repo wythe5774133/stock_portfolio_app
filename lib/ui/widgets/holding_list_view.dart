@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 
 import '../../models/stock_transaction.dart';
 import '../dashboard_controller.dart';
+import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
 
@@ -21,11 +22,13 @@ import '../theme/profit_color_scheme.dart';
 class HoldingListView extends StatelessWidget {
   final List<HoldingDisplayRow> rows;
   final ProfitColorScheme profit_colors;
+  final DashboardController controller;
 
   const HoldingListView({
     super.key,
     required this.rows,
     required this.profit_colors,
+    required this.controller,
   });
 
   @override
@@ -47,7 +50,10 @@ class HoldingListView extends StatelessWidget {
         Divider(height: 1, color: colors.card_border),
         for (int i = 0; i < rows.length; i++) ...<Widget>[
           if (i > 0) Divider(height: 1, color: colors.divider),
-          _HoldingExpandableRow(row: rows[i], profit_colors: profit_colors),
+          _HoldingExpandableRow(
+              row: rows[i],
+              profit_colors: profit_colors,
+              controller: controller),
         ],
       ],
     );
@@ -96,10 +102,12 @@ class HoldingListView extends StatelessWidget {
 class _HoldingExpandableRow extends StatelessWidget {
   final HoldingDisplayRow row;
   final ProfitColorScheme profit_colors;
+  final DashboardController controller;
 
   const _HoldingExpandableRow({
     required this.row,
     required this.profit_colors,
+    required this.controller,
   });
 
   @override
@@ -233,6 +241,16 @@ class _HoldingExpandableRow extends StatelessWidget {
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color: colors.text_secondary),
+              ),
+              TextButton.icon(
+                onPressed: () => StockDetailPage.Open(context, controller,
+                    row.position.symbol, row.position.symbol),
+                icon: const Icon(Icons.candlestick_chart_outlined, size: 15),
+                label: const Text('個股詳情', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
               ),
               const Spacer(),
               if (row.dividend_income > 0) ...<Widget>[

@@ -9,6 +9,7 @@ import 'transaction_dao.dart';
 import 'quote_cache_dao.dart';
 import 'historical_price_dao.dart';
 import 'dividend_dao.dart';
+import 'watchlist_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -79,6 +80,16 @@ class DividendEvents extends Table {
       ];
 }
 
+/// 自選股追蹤清單表，symbol 為主鍵。
+class WatchlistSymbols extends Table {
+  TextColumn get symbol => text()();
+  TextColumn get name => text()(); // 公司/基金名稱（加入時的搜尋結果）
+  IntColumn get added_at => integer()(); // 加入時間 epoch 毫秒
+
+  @override
+  Set<Column> get primaryKey => <Column>{symbol};
+}
+
 /*
  * @author Toby
  * @date 2026/07/11
@@ -92,8 +103,15 @@ class DividendEvents extends Table {
     QuoteCache,
     HistoricalPrices,
     DividendEvents,
+    WatchlistSymbols,
   ],
-  daos: <Type>[TransactionDao, QuoteCacheDao, HistoricalPriceDao, DividendDao],
+  daos: <Type>[
+    TransactionDao,
+    QuoteCacheDao,
+    HistoricalPriceDao,
+    DividendDao,
+    WatchlistDao,
+  ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
@@ -102,7 +120,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.Memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -111,6 +129,10 @@ class AppDatabase extends _$AppDatabase {
           // v1 → v2：新增配息事件表
           if (from < 2) {
             await m.createTable(dividendEvents);
+          }
+          // v2 → v3：新增追蹤清單表
+          if (from < 3) {
+            await m.createTable(watchlistSymbols);
           }
         },
       );

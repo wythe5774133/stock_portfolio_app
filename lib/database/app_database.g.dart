@@ -1718,6 +1718,268 @@ class DividendEventsCompanion extends UpdateCompanion<DividendEvent> {
   }
 }
 
+class $WatchlistSymbolsTable extends WatchlistSymbols
+    with TableInfo<$WatchlistSymbolsTable, WatchlistSymbol> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WatchlistSymbolsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _symbolMeta = const VerificationMeta('symbol');
+  @override
+  late final GeneratedColumn<String> symbol = GeneratedColumn<String>(
+    'symbol',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _added_atMeta = const VerificationMeta(
+    'added_at',
+  );
+  @override
+  late final GeneratedColumn<int> added_at = GeneratedColumn<int>(
+    'added_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [symbol, name, added_at];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'watchlist_symbols';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WatchlistSymbol> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('symbol')) {
+      context.handle(
+        _symbolMeta,
+        symbol.isAcceptableOrUnknown(data['symbol']!, _symbolMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_symbolMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('added_at')) {
+      context.handle(
+        _added_atMeta,
+        added_at.isAcceptableOrUnknown(data['added_at']!, _added_atMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_added_atMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {symbol};
+  @override
+  WatchlistSymbol map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WatchlistSymbol(
+      symbol: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}symbol'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      added_at: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}added_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WatchlistSymbolsTable createAlias(String alias) {
+    return $WatchlistSymbolsTable(attachedDatabase, alias);
+  }
+}
+
+class WatchlistSymbol extends DataClass implements Insertable<WatchlistSymbol> {
+  final String symbol;
+  final String name;
+  final int added_at;
+  const WatchlistSymbol({
+    required this.symbol,
+    required this.name,
+    required this.added_at,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['symbol'] = Variable<String>(symbol);
+    map['name'] = Variable<String>(name);
+    map['added_at'] = Variable<int>(added_at);
+    return map;
+  }
+
+  WatchlistSymbolsCompanion toCompanion(bool nullToAbsent) {
+    return WatchlistSymbolsCompanion(
+      symbol: Value(symbol),
+      name: Value(name),
+      added_at: Value(added_at),
+    );
+  }
+
+  factory WatchlistSymbol.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WatchlistSymbol(
+      symbol: serializer.fromJson<String>(json['symbol']),
+      name: serializer.fromJson<String>(json['name']),
+      added_at: serializer.fromJson<int>(json['added_at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'symbol': serializer.toJson<String>(symbol),
+      'name': serializer.toJson<String>(name),
+      'added_at': serializer.toJson<int>(added_at),
+    };
+  }
+
+  WatchlistSymbol copyWith({String? symbol, String? name, int? added_at}) =>
+      WatchlistSymbol(
+        symbol: symbol ?? this.symbol,
+        name: name ?? this.name,
+        added_at: added_at ?? this.added_at,
+      );
+  WatchlistSymbol copyWithCompanion(WatchlistSymbolsCompanion data) {
+    return WatchlistSymbol(
+      symbol: data.symbol.present ? data.symbol.value : this.symbol,
+      name: data.name.present ? data.name.value : this.name,
+      added_at: data.added_at.present ? data.added_at.value : this.added_at,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WatchlistSymbol(')
+          ..write('symbol: $symbol, ')
+          ..write('name: $name, ')
+          ..write('added_at: $added_at')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(symbol, name, added_at);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WatchlistSymbol &&
+          other.symbol == this.symbol &&
+          other.name == this.name &&
+          other.added_at == this.added_at);
+}
+
+class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
+  final Value<String> symbol;
+  final Value<String> name;
+  final Value<int> added_at;
+  final Value<int> rowid;
+  const WatchlistSymbolsCompanion({
+    this.symbol = const Value.absent(),
+    this.name = const Value.absent(),
+    this.added_at = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WatchlistSymbolsCompanion.insert({
+    required String symbol,
+    required String name,
+    required int added_at,
+    this.rowid = const Value.absent(),
+  }) : symbol = Value(symbol),
+       name = Value(name),
+       added_at = Value(added_at);
+  static Insertable<WatchlistSymbol> custom({
+    Expression<String>? symbol,
+    Expression<String>? name,
+    Expression<int>? added_at,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (symbol != null) 'symbol': symbol,
+      if (name != null) 'name': name,
+      if (added_at != null) 'added_at': added_at,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WatchlistSymbolsCompanion copyWith({
+    Value<String>? symbol,
+    Value<String>? name,
+    Value<int>? added_at,
+    Value<int>? rowid,
+  }) {
+    return WatchlistSymbolsCompanion(
+      symbol: symbol ?? this.symbol,
+      name: name ?? this.name,
+      added_at: added_at ?? this.added_at,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (symbol.present) {
+      map['symbol'] = Variable<String>(symbol.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (added_at.present) {
+      map['added_at'] = Variable<int>(added_at.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WatchlistSymbolsCompanion(')
+          ..write('symbol: $symbol, ')
+          ..write('name: $name, ')
+          ..write('added_at: $added_at, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -1728,6 +1990,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $DividendEventsTable dividendEvents = $DividendEventsTable(this);
+  late final $WatchlistSymbolsTable watchlistSymbols = $WatchlistSymbolsTable(
+    this,
+  );
   late final TransactionDao transactionDao = TransactionDao(
     this as AppDatabase,
   );
@@ -1736,6 +2001,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this as AppDatabase,
   );
   late final DividendDao dividendDao = DividendDao(this as AppDatabase);
+  late final WatchlistDao watchlistDao = WatchlistDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1745,6 +2011,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     quoteCache,
     historicalPrices,
     dividendEvents,
+    watchlistSymbols,
   ];
 }
 
@@ -2663,6 +2930,174 @@ typedef $$DividendEventsTableProcessedTableManager =
       DividendEvent,
       PrefetchHooks Function()
     >;
+typedef $$WatchlistSymbolsTableCreateCompanionBuilder =
+    WatchlistSymbolsCompanion Function({
+      required String symbol,
+      required String name,
+      required int added_at,
+      Value<int> rowid,
+    });
+typedef $$WatchlistSymbolsTableUpdateCompanionBuilder =
+    WatchlistSymbolsCompanion Function({
+      Value<String> symbol,
+      Value<String> name,
+      Value<int> added_at,
+      Value<int> rowid,
+    });
+
+class $$WatchlistSymbolsTableFilterComposer
+    extends Composer<_$AppDatabase, $WatchlistSymbolsTable> {
+  $$WatchlistSymbolsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get added_at => $composableBuilder(
+    column: $table.added_at,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$WatchlistSymbolsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WatchlistSymbolsTable> {
+  $$WatchlistSymbolsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get symbol => $composableBuilder(
+    column: $table.symbol,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get added_at => $composableBuilder(
+    column: $table.added_at,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WatchlistSymbolsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WatchlistSymbolsTable> {
+  $$WatchlistSymbolsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get symbol =>
+      $composableBuilder(column: $table.symbol, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get added_at =>
+      $composableBuilder(column: $table.added_at, builder: (column) => column);
+}
+
+class $$WatchlistSymbolsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WatchlistSymbolsTable,
+          WatchlistSymbol,
+          $$WatchlistSymbolsTableFilterComposer,
+          $$WatchlistSymbolsTableOrderingComposer,
+          $$WatchlistSymbolsTableAnnotationComposer,
+          $$WatchlistSymbolsTableCreateCompanionBuilder,
+          $$WatchlistSymbolsTableUpdateCompanionBuilder,
+          (
+            WatchlistSymbol,
+            BaseReferences<
+              _$AppDatabase,
+              $WatchlistSymbolsTable,
+              WatchlistSymbol
+            >,
+          ),
+          WatchlistSymbol,
+          PrefetchHooks Function()
+        > {
+  $$WatchlistSymbolsTableTableManager(
+    _$AppDatabase db,
+    $WatchlistSymbolsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WatchlistSymbolsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WatchlistSymbolsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WatchlistSymbolsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> symbol = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> added_at = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WatchlistSymbolsCompanion(
+                symbol: symbol,
+                name: name,
+                added_at: added_at,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String symbol,
+                required String name,
+                required int added_at,
+                Value<int> rowid = const Value.absent(),
+              }) => WatchlistSymbolsCompanion.insert(
+                symbol: symbol,
+                name: name,
+                added_at: added_at,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$WatchlistSymbolsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WatchlistSymbolsTable,
+      WatchlistSymbol,
+      $$WatchlistSymbolsTableFilterComposer,
+      $$WatchlistSymbolsTableOrderingComposer,
+      $$WatchlistSymbolsTableAnnotationComposer,
+      $$WatchlistSymbolsTableCreateCompanionBuilder,
+      $$WatchlistSymbolsTableUpdateCompanionBuilder,
+      (
+        WatchlistSymbol,
+        BaseReferences<_$AppDatabase, $WatchlistSymbolsTable, WatchlistSymbol>,
+      ),
+      WatchlistSymbol,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2675,4 +3110,6 @@ class $AppDatabaseManager {
       $$HistoricalPricesTableTableManager(_db, _db.historicalPrices);
   $$DividendEventsTableTableManager get dividendEvents =>
       $$DividendEventsTableTableManager(_db, _db.dividendEvents);
+  $$WatchlistSymbolsTableTableManager get watchlistSymbols =>
+      $$WatchlistSymbolsTableTableManager(_db, _db.watchlistSymbols);
 }
