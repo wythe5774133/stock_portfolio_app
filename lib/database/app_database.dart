@@ -10,6 +10,7 @@ import 'quote_cache_dao.dart';
 import 'historical_price_dao.dart';
 import 'dividend_dao.dart';
 import 'watchlist_dao.dart';
+import 'tombstone_dao.dart';
 
 part 'app_database.g.dart';
 
@@ -92,6 +93,19 @@ class WatchlistSymbols extends Table {
   Set<Column> get primaryKey => <Column>{symbol};
 }
 
+/// 同步墓碑表：記錄被刪除的項目，避免雲端同步時「復活」。
+/// kind = 'transaction' | 'watchlist'；item_key 為該項目的唯一鍵字串。
+class SyncTombstones extends Table {
+  TextColumn get kind => text()();
+  TextColumn get item_key => text()();
+  IntColumn get deleted_at => integer()(); // epoch 毫秒
+
+  @override
+  List<Set<Column>> get uniqueKeys => <Set<Column>>[
+        <Column>{kind, item_key},
+      ];
+}
+
 /*
  * @author Toby
  * @date 2026/07/11
@@ -106,6 +120,7 @@ class WatchlistSymbols extends Table {
     HistoricalPrices,
     DividendEvents,
     WatchlistSymbols,
+    SyncTombstones,
   ],
   daos: <Type>[
     TransactionDao,
@@ -113,6 +128,7 @@ class WatchlistSymbols extends Table {
     HistoricalPriceDao,
     DividendDao,
     WatchlistDao,
+    TombstoneDao,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -122,7 +138,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.Memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -139,6 +155,10 @@ class AppDatabase extends _$AppDatabase {
           // v3 → v4：追蹤清單加入分類欄位
           if (from >= 3 && from < 4) {
             await m.addColumn(watchlistSymbols, watchlistSymbols.group_name);
+          }
+          // v4 → v5：新增同步墓碑表（雲端同步防刪除復活）
+          if (from < 5) {
+            await m.createTable(syncTombstones);
           }
         },
       );

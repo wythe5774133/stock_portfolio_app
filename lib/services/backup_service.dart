@@ -4,6 +4,7 @@
 import 'dart:convert';
 
 import '../database/app_database.dart';
+import '../database/tombstone_dao.dart';
 import '../models/stock_transaction.dart';
 
 /// 匯入備份的結果統計。
@@ -55,6 +56,8 @@ class BackupService {
         await database.transactionDao.GetAllTransactions();
     final List<WatchlistSymbol> watchlist =
         await database.watchlistDao.GetAllSymbols();
+    final List<SyncTombstone> tombstones =
+        await database.tombstoneDao.GetAllTombstones();
 
     final Map<String, dynamic> backup = <String, dynamic>{
       'format_version': FORMAT_VERSION,
@@ -78,6 +81,16 @@ class BackupService {
             'symbol': w.symbol,
             'name': w.name,
             'added_at': w.added_at,
+            'group_name': w.group_name,
+          },
+      ],
+      // 刪除墓碑：讓另一台裝置同步時同步刪除，而不是把資料「復活」
+      'tombstones': <Map<String, dynamic>>[
+        for (final SyncTombstone t in tombstones)
+          <String, dynamic>{
+            'kind': t.kind,
+            'item_key': t.item_key,
+            'deleted_at': t.deleted_at,
           },
       ],
       'settings': settings,
@@ -107,6 +120,32 @@ class BackupService {
       throw const FormatException('不是本 App 的備份檔');
     }
 
+    // 步驟 1：先合併墓碑（遠端刪過的東西，本地也要刪掉且不再匯入）
+    final List<dynamic> remote_tombstones =
+        (backup['tombstones'] as List<dynamic>?) ?? <dynamic>[];
+    for (final dynamic raw in remote_tombstones) {
+      if (raw is! Map<String, dynamic>) {
+        continue;
+      }
+      final String? kind = raw['kind'] as String?;
+      final String? item_key = raw['item_key'] as String?;
+      if (kind == null || item_key == null) {
+        continue;
+      }
+      await database.tombstoneDao.AddTombstone(kind, item_key);
+      // 套用刪除：本地若還有這個項目，刪掉
+      if (kind == TombstoneDao.KIND_WATCHLIST) {
+        await database.watchlistDao.RemoveSymbol(item_key);
+      } else if (kind == TombstoneDao.KIND_TRANSACTION) {
+        await _DeleteLocalTransactionByKey(item_key);
+      }
+    }
+    final Set<String> transaction_tombstones = await database.tombstoneDao
+        .GetTombstoneKeys(TombstoneDao.KIND_TRANSACTION);
+    final Set<String> watchlist_tombstones = await database.tombstoneDao
+        .GetTombstoneKeys(TombstoneDao.KIND_WATCHLIST);
+
+    // 步驟 2：匯入交易（跳過墓碑名單內的）
     int added = 0;
     int duplicated = 0;
     final List<dynamic> transactions =
@@ -128,21 +167,25 @@ class BackupService {
           quantity == null) {
         continue; // 缺欄位的紀錄跳過
       }
-      final bool inserted =
-          await database.transactionDao.InsertIgnoreTransaction(
-        StockTransaction(
-          symbol: symbol,
-          trade_date: trade_date,
-          purchase_price: price.toDouble(),
-          quantity: quantity.toDouble(),
-          transaction_type: type,
-          commission: (raw['commission'] as num?)?.toDouble(),
-          comment: raw['comment'] as String?,
-        ),
+      final StockTransaction transaction = StockTransaction(
+        symbol: symbol,
+        trade_date: trade_date,
+        purchase_price: price.toDouble(),
+        quantity: quantity.toDouble(),
+        transaction_type: type,
+        commission: (raw['commission'] as num?)?.toDouble(),
+        comment: raw['comment'] as String?,
       );
+      if (transaction_tombstones
+          .contains(TombstoneDao.BuildTransactionKey(transaction))) {
+        continue; // 這筆已被某台裝置刪除，不復活
+      }
+      final bool inserted = await database.transactionDao
+          .InsertIgnoreTransaction(transaction);
       inserted ? added++ : duplicated++;
     }
 
+    // 步驟 3：匯入追蹤清單（跳過墓碑名單內的）
     int watchlist_added = 0;
     final List<dynamic> watchlist =
         (backup['watchlist'] as List<dynamic>?) ?? <dynamic>[];
@@ -151,13 +194,14 @@ class BackupService {
         continue;
       }
       final String? symbol = raw['symbol'] as String?;
-      if (symbol == null) {
+      if (symbol == null || watchlist_tombstones.contains(symbol)) {
         continue;
       }
       final bool inserted = await database.watchlistDao.AddSymbol(
         symbol,
         (raw['name'] as String?) ?? symbol,
         (raw['added_at'] as int?) ?? DateTime.now().millisecondsSinceEpoch,
+        group_name: (raw['group_name'] as String?) ?? '自選',
       );
       if (inserted) {
         watchlist_added++;
@@ -171,5 +215,17 @@ class BackupService {
       settings: (backup['settings'] as Map<String, dynamic>?) ??
           <String, dynamic>{},
     );
+  }
+
+  /// 依墓碑鍵刪除本地交易（找出符合唯一鍵的那筆）。
+  Future<void> _DeleteLocalTransactionByKey(String item_key) async {
+    final List<StockTransaction> all =
+        await database.transactionDao.GetAllTransactions();
+    for (final StockTransaction tx in all) {
+      if (TombstoneDao.BuildTransactionKey(tx) == item_key && tx.id != null) {
+        await database.transactionDao.DeleteTransactionById(tx.id!);
+        return;
+      }
+    }
   }
 }

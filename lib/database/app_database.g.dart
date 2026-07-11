@@ -2029,6 +2029,276 @@ class WatchlistSymbolsCompanion extends UpdateCompanion<WatchlistSymbol> {
   }
 }
 
+class $SyncTombstonesTable extends SyncTombstones
+    with TableInfo<$SyncTombstonesTable, SyncTombstone> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SyncTombstonesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _item_keyMeta = const VerificationMeta(
+    'item_key',
+  );
+  @override
+  late final GeneratedColumn<String> item_key = GeneratedColumn<String>(
+    'item_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deleted_atMeta = const VerificationMeta(
+    'deleted_at',
+  );
+  @override
+  late final GeneratedColumn<int> deleted_at = GeneratedColumn<int>(
+    'deleted_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [kind, item_key, deleted_at];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'sync_tombstones';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SyncTombstone> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('item_key')) {
+      context.handle(
+        _item_keyMeta,
+        item_key.isAcceptableOrUnknown(data['item_key']!, _item_keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_item_keyMeta);
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deleted_atMeta,
+        deleted_at.isAcceptableOrUnknown(data['deleted_at']!, _deleted_atMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_deleted_atMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => const {};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {kind, item_key},
+  ];
+  @override
+  SyncTombstone map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SyncTombstone(
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      item_key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}item_key'],
+      )!,
+      deleted_at: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}deleted_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SyncTombstonesTable createAlias(String alias) {
+    return $SyncTombstonesTable(attachedDatabase, alias);
+  }
+}
+
+class SyncTombstone extends DataClass implements Insertable<SyncTombstone> {
+  final String kind;
+  final String item_key;
+  final int deleted_at;
+  const SyncTombstone({
+    required this.kind,
+    required this.item_key,
+    required this.deleted_at,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['kind'] = Variable<String>(kind);
+    map['item_key'] = Variable<String>(item_key);
+    map['deleted_at'] = Variable<int>(deleted_at);
+    return map;
+  }
+
+  SyncTombstonesCompanion toCompanion(bool nullToAbsent) {
+    return SyncTombstonesCompanion(
+      kind: Value(kind),
+      item_key: Value(item_key),
+      deleted_at: Value(deleted_at),
+    );
+  }
+
+  factory SyncTombstone.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SyncTombstone(
+      kind: serializer.fromJson<String>(json['kind']),
+      item_key: serializer.fromJson<String>(json['item_key']),
+      deleted_at: serializer.fromJson<int>(json['deleted_at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'kind': serializer.toJson<String>(kind),
+      'item_key': serializer.toJson<String>(item_key),
+      'deleted_at': serializer.toJson<int>(deleted_at),
+    };
+  }
+
+  SyncTombstone copyWith({String? kind, String? item_key, int? deleted_at}) =>
+      SyncTombstone(
+        kind: kind ?? this.kind,
+        item_key: item_key ?? this.item_key,
+        deleted_at: deleted_at ?? this.deleted_at,
+      );
+  SyncTombstone copyWithCompanion(SyncTombstonesCompanion data) {
+    return SyncTombstone(
+      kind: data.kind.present ? data.kind.value : this.kind,
+      item_key: data.item_key.present ? data.item_key.value : this.item_key,
+      deleted_at: data.deleted_at.present
+          ? data.deleted_at.value
+          : this.deleted_at,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncTombstone(')
+          ..write('kind: $kind, ')
+          ..write('item_key: $item_key, ')
+          ..write('deleted_at: $deleted_at')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(kind, item_key, deleted_at);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SyncTombstone &&
+          other.kind == this.kind &&
+          other.item_key == this.item_key &&
+          other.deleted_at == this.deleted_at);
+}
+
+class SyncTombstonesCompanion extends UpdateCompanion<SyncTombstone> {
+  final Value<String> kind;
+  final Value<String> item_key;
+  final Value<int> deleted_at;
+  final Value<int> rowid;
+  const SyncTombstonesCompanion({
+    this.kind = const Value.absent(),
+    this.item_key = const Value.absent(),
+    this.deleted_at = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SyncTombstonesCompanion.insert({
+    required String kind,
+    required String item_key,
+    required int deleted_at,
+    this.rowid = const Value.absent(),
+  }) : kind = Value(kind),
+       item_key = Value(item_key),
+       deleted_at = Value(deleted_at);
+  static Insertable<SyncTombstone> custom({
+    Expression<String>? kind,
+    Expression<String>? item_key,
+    Expression<int>? deleted_at,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (kind != null) 'kind': kind,
+      if (item_key != null) 'item_key': item_key,
+      if (deleted_at != null) 'deleted_at': deleted_at,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SyncTombstonesCompanion copyWith({
+    Value<String>? kind,
+    Value<String>? item_key,
+    Value<int>? deleted_at,
+    Value<int>? rowid,
+  }) {
+    return SyncTombstonesCompanion(
+      kind: kind ?? this.kind,
+      item_key: item_key ?? this.item_key,
+      deleted_at: deleted_at ?? this.deleted_at,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (item_key.present) {
+      map['item_key'] = Variable<String>(item_key.value);
+    }
+    if (deleted_at.present) {
+      map['deleted_at'] = Variable<int>(deleted_at.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SyncTombstonesCompanion(')
+          ..write('kind: $kind, ')
+          ..write('item_key: $item_key, ')
+          ..write('deleted_at: $deleted_at, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2042,6 +2312,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $WatchlistSymbolsTable watchlistSymbols = $WatchlistSymbolsTable(
     this,
   );
+  late final $SyncTombstonesTable syncTombstones = $SyncTombstonesTable(this);
   late final TransactionDao transactionDao = TransactionDao(
     this as AppDatabase,
   );
@@ -2051,6 +2322,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final DividendDao dividendDao = DividendDao(this as AppDatabase);
   late final WatchlistDao watchlistDao = WatchlistDao(this as AppDatabase);
+  late final TombstoneDao tombstoneDao = TombstoneDao(this as AppDatabase);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2061,6 +2333,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     historicalPrices,
     dividendEvents,
     watchlistSymbols,
+    syncTombstones,
   ];
 }
 
@@ -3168,6 +3441,172 @@ typedef $$WatchlistSymbolsTableProcessedTableManager =
       WatchlistSymbol,
       PrefetchHooks Function()
     >;
+typedef $$SyncTombstonesTableCreateCompanionBuilder =
+    SyncTombstonesCompanion Function({
+      required String kind,
+      required String item_key,
+      required int deleted_at,
+      Value<int> rowid,
+    });
+typedef $$SyncTombstonesTableUpdateCompanionBuilder =
+    SyncTombstonesCompanion Function({
+      Value<String> kind,
+      Value<String> item_key,
+      Value<int> deleted_at,
+      Value<int> rowid,
+    });
+
+class $$SyncTombstonesTableFilterComposer
+    extends Composer<_$AppDatabase, $SyncTombstonesTable> {
+  $$SyncTombstonesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get item_key => $composableBuilder(
+    column: $table.item_key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get deleted_at => $composableBuilder(
+    column: $table.deleted_at,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SyncTombstonesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SyncTombstonesTable> {
+  $$SyncTombstonesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get item_key => $composableBuilder(
+    column: $table.item_key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get deleted_at => $composableBuilder(
+    column: $table.deleted_at,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SyncTombstonesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SyncTombstonesTable> {
+  $$SyncTombstonesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get item_key =>
+      $composableBuilder(column: $table.item_key, builder: (column) => column);
+
+  GeneratedColumn<int> get deleted_at => $composableBuilder(
+    column: $table.deleted_at,
+    builder: (column) => column,
+  );
+}
+
+class $$SyncTombstonesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SyncTombstonesTable,
+          SyncTombstone,
+          $$SyncTombstonesTableFilterComposer,
+          $$SyncTombstonesTableOrderingComposer,
+          $$SyncTombstonesTableAnnotationComposer,
+          $$SyncTombstonesTableCreateCompanionBuilder,
+          $$SyncTombstonesTableUpdateCompanionBuilder,
+          (
+            SyncTombstone,
+            BaseReferences<_$AppDatabase, $SyncTombstonesTable, SyncTombstone>,
+          ),
+          SyncTombstone,
+          PrefetchHooks Function()
+        > {
+  $$SyncTombstonesTableTableManager(
+    _$AppDatabase db,
+    $SyncTombstonesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SyncTombstonesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SyncTombstonesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SyncTombstonesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> kind = const Value.absent(),
+                Value<String> item_key = const Value.absent(),
+                Value<int> deleted_at = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SyncTombstonesCompanion(
+                kind: kind,
+                item_key: item_key,
+                deleted_at: deleted_at,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String kind,
+                required String item_key,
+                required int deleted_at,
+                Value<int> rowid = const Value.absent(),
+              }) => SyncTombstonesCompanion.insert(
+                kind: kind,
+                item_key: item_key,
+                deleted_at: deleted_at,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SyncTombstonesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SyncTombstonesTable,
+      SyncTombstone,
+      $$SyncTombstonesTableFilterComposer,
+      $$SyncTombstonesTableOrderingComposer,
+      $$SyncTombstonesTableAnnotationComposer,
+      $$SyncTombstonesTableCreateCompanionBuilder,
+      $$SyncTombstonesTableUpdateCompanionBuilder,
+      (
+        SyncTombstone,
+        BaseReferences<_$AppDatabase, $SyncTombstonesTable, SyncTombstone>,
+      ),
+      SyncTombstone,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3182,4 +3621,6 @@ class $AppDatabaseManager {
       $$DividendEventsTableTableManager(_db, _db.dividendEvents);
   $$WatchlistSymbolsTableTableManager get watchlistSymbols =>
       $$WatchlistSymbolsTableTableManager(_db, _db.watchlistSymbols);
+  $$SyncTombstonesTableTableManager get syncTombstones =>
+      $$SyncTombstonesTableTableManager(_db, _db.syncTombstones);
 }

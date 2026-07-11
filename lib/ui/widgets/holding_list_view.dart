@@ -491,7 +491,7 @@ class _HoldingExpandableRow extends StatelessWidget {
     if (confirmed != true || tx.id == null) {
       return;
     }
-    await controller.DeleteTransaction(tx.id!);
+    await controller.DeleteTransaction(tx);
     messenger.showSnackBar(const SnackBar(content: Text('交易已刪除，持倉已重算')));
   }
 

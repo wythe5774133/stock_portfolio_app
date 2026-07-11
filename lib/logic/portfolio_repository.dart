@@ -4,6 +4,7 @@
 import 'package:http/http.dart' as http;
 
 import '../database/app_database.dart';
+import '../database/tombstone_dao.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/portfolio_snapshot.dart';
@@ -14,6 +15,7 @@ import '../models/symbol_search_result.dart';
 import '../services/backup_service.dart';
 import '../services/csv_transaction_importer.dart';
 import '../services/dividend_service.dart';
+import '../services/google_drive_sync_service.dart';
 import '../services/historical_price_service.dart';
 import '../services/market_session_resolver.dart';
 import '../services/quote_polling_scheduler.dart';
@@ -50,6 +52,7 @@ class PortfolioRepository {
   final StockSymbolSearchService symbol_search_service;
   final DividendService dividend_service;
   late final BackupService backup_service;
+  late final GoogleDriveSyncService drive_sync_service;
   late final QuotePollingScheduler quote_scheduler;
 
   PortfolioRepository({
@@ -70,6 +73,8 @@ class PortfolioRepository {
           http_client: http_client,
         ) {
     backup_service = BackupService(database: database);
+    drive_sync_service =
+        GoogleDriveSyncService(backup_service: backup_service);
     quote_scheduler = QuotePollingScheduler(
       quote_service: quote_service,
       quote_cache_dao: database.quoteCacheDao,
@@ -119,10 +124,15 @@ class PortfolioRepository {
 
   /// 加入自選追蹤；回傳 true 表示實際新增（false = 已在清單中）。
   Future<bool> AddToWatchlist(String symbol, String name,
-      {String group_name = '自選'}) {
-    return database.watchlistDao.AddSymbol(
+      {String group_name = '自選'}) async {
+    final bool added = await database.watchlistDao.AddSymbol(
         symbol, name, DateTime.now().millisecondsSinceEpoch,
         group_name: group_name);
+    if (added) {
+      await database.tombstoneDao
+          .RemoveTombstone(TombstoneDao.KIND_WATCHLIST, symbol);
+    }
+    return added;
   }
 
   /// 更改追蹤股的分類。
@@ -130,9 +140,11 @@ class PortfolioRepository {
     return database.watchlistDao.UpdateSymbolGroup(symbol, group_name);
   }
 
-  /// 移除自選追蹤。
-  Future<void> RemoveFromWatchlist(String symbol) {
-    return database.watchlistDao.RemoveSymbol(symbol);
+  /// 移除自選追蹤並留下同步墓碑。
+  Future<void> RemoveFromWatchlist(String symbol) async {
+    await database.watchlistDao.RemoveSymbol(symbol);
+    await database.tombstoneDao
+        .AddTombstone(TombstoneDao.KIND_WATCHLIST, symbol);
   }
 
   /// 抓取個股詳情頁的 K 線資料（日/週/月＋時間範圍）；失敗回傳 null。
@@ -191,13 +203,33 @@ class PortfolioRepository {
    *
    *  @return  true 表示新增成功；false 表示與既有紀錄重複被忽略
    */
-  Future<bool> AddManualTransaction(StockTransaction transaction) {
-    return database.transactionDao.InsertIgnoreTransaction(transaction);
+  Future<bool> AddManualTransaction(StockTransaction transaction) async {
+    final bool inserted =
+        await database.transactionDao.InsertIgnoreTransaction(transaction);
+    if (inserted) {
+      // 重新加入曾刪除的相同交易 → 撤銷墓碑
+      await database.tombstoneDao.RemoveTombstone(
+        TombstoneDao.KIND_TRANSACTION,
+        TombstoneDao.BuildTransactionKey(transaction),
+      );
+    }
+    return inserted;
   }
 
-  /// 刪除單筆交易（依資料庫主鍵）。
-  Future<bool> DeleteTransaction(int transaction_id) {
-    return database.transactionDao.DeleteTransactionById(transaction_id);
+  /// 刪除單筆交易並留下同步墓碑（避免雲端同步時復活）。
+  Future<bool> DeleteTransaction(StockTransaction transaction) async {
+    if (transaction.id == null) {
+      return false;
+    }
+    final bool deleted = await database.transactionDao
+        .DeleteTransactionById(transaction.id!);
+    if (deleted) {
+      await database.tombstoneDao.AddTombstone(
+        TombstoneDao.KIND_TRANSACTION,
+        TombstoneDao.BuildTransactionKey(transaction),
+      );
+    }
+    return deleted;
   }
 
   /// 以關鍵字搜尋股票代號（手動記帳的自動完成）。

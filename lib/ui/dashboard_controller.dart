@@ -14,6 +14,7 @@ import '../models/stock_transaction.dart';
 import '../models/symbol_search_result.dart';
 import '../services/app_settings_store.dart';
 import '../services/backup_service.dart';
+import '../services/google_drive_sync_service.dart';
 import '../services/csv_transaction_importer.dart';
 import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
@@ -90,6 +91,7 @@ class DashboardController extends ChangeNotifier {
   static const String SETTING_KEY_COLOR_CONVENTION = 'profit_color_convention';
   static const String SETTING_KEY_THEME_MODE = 'theme_mode';
   static const String SETTING_KEY_DIVIDEND_TRACKING = 'dividend_tracking';
+  static const String SETTING_KEY_LAST_DRIVE_SYNC = 'last_drive_sync_at';
 
   final PortfolioRepository repository;
   final AppSettingsStore settings_store;
@@ -109,6 +111,10 @@ class DashboardController extends ChangeNotifier {
   // 股息與年化報酬率
   Map<String, double> dividend_income_by_symbol = <String, double>{};
   double? portfolio_xirr; // 資金加權年化報酬率（null = 資料不足）
+
+  // Google Drive 同步狀態
+  bool is_drive_syncing = false;
+  DateTime? last_drive_sync_at;
 
   // 自選股追蹤清單
   List<WatchlistSymbol> watchlist = <WatchlistSymbol>[];
@@ -171,6 +177,81 @@ class DashboardController extends ChangeNotifier {
     await repository.StartBackgroundQuotePolling();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+
+    // 嘗試恢復 Google 登入並靜默同步
+    final int? last_sync_ms = settings[SETTING_KEY_LAST_DRIVE_SYNC] as int?;
+    if (last_sync_ms != null) {
+      last_drive_sync_at = DateTime.fromMillisecondsSinceEpoch(last_sync_ms);
+    }
+    if (await repository.drive_sync_service.TrySilentSignIn()) {
+      notifyListeners();
+      await SyncWithDrive();
+    }
+  }
+
+  /// Google 同步是否已登入。
+  bool get is_drive_signed_in =>
+      repository.drive_sync_service.is_signed_in;
+
+  /// Google 帳號 email。
+  String? get drive_account_email =>
+      repository.drive_sync_service.account_email;
+
+  /// 互動式 Google 登入並立即同步；回傳是否登入成功。
+  Future<bool> SignInToGoogleDrive() async {
+    final bool signed_in = await repository.drive_sync_service.SignIn();
+    notifyListeners();
+    if (signed_in) {
+      await SyncWithDrive();
+    }
+    return signed_in;
+  }
+
+  /// 登出 Google 同步。
+  Future<void> SignOutGoogleDrive() async {
+    await repository.drive_sync_service.SignOut();
+    notifyListeners();
+  }
+
+  /*
+   *  @fn      Future<bool> SyncWithDrive()
+   *
+   *  @brief   ( 執行一次 Drive 雙向同步；有拉到新資料時刷新全部畫面 )
+   *
+   *  @return  true 表示本次同步成功
+   */
+  Future<bool> SyncWithDrive() async {
+    if (!is_drive_signed_in || is_drive_syncing) {
+      return false;
+    }
+    is_drive_syncing = true;
+    notifyListeners();
+    try {
+      final Map<String, dynamic> settings =
+          await settings_store.LoadSettings();
+      final DriveSyncResult? result =
+          await repository.drive_sync_service.SyncNow(settings);
+      if (result == null) {
+        return false;
+      }
+      last_drive_sync_at = result.synced_at;
+      await settings_store.SaveSetting(SETTING_KEY_LAST_DRIVE_SYNC,
+          result.synced_at.millisecondsSinceEpoch);
+      if (result.pulled_transactions > 0) {
+        // 有從雲端合併進新資料 → 全面刷新
+        await ReloadHoldings();
+        await ReloadWatchlist();
+        await repository.quote_scheduler.PollQuotesNow();
+        await ReloadPortfolioHistory();
+        await RefreshDividendsAndXirr();
+      } else {
+        await ReloadWatchlist(); // 追蹤清單/分類可能有變
+      }
+      return true;
+    } finally {
+      is_drive_syncing = false;
+      notifyListeners();
+    }
   }
 
   /// 重新計算股息收入與 XIRR（匯入、記帳後也會呼叫）。
@@ -227,6 +308,9 @@ class DashboardController extends ChangeNotifier {
     await repository.quote_scheduler.PollQuotesNow();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+    if (is_drive_signed_in) {
+      SyncWithDrive(); // 背景同步，不擋 UI
+    }
     return summary;
   }
 
@@ -249,6 +333,9 @@ class DashboardController extends ChangeNotifier {
       await repository.quote_scheduler.PollQuotesNow();
       await ReloadPortfolioHistory();
       await RefreshDividendsAndXirr();
+      if (is_drive_signed_in) {
+        SyncWithDrive(); // 背景同步，不擋 UI
+      }
     }
     return inserted;
   }
@@ -353,6 +440,9 @@ class DashboardController extends ChangeNotifier {
     await repository.quote_scheduler.PollQuotesNow();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+    if (is_drive_signed_in) {
+      SyncWithDrive(); // 背景同步，不擋 UI
+    }
     return summary;
   }
 
@@ -365,11 +455,14 @@ class DashboardController extends ChangeNotifier {
   }
 
   /// 刪除單筆交易並刷新持倉、曲線與股息統計。
-  Future<void> DeleteTransaction(int transaction_id) async {
-    await repository.DeleteTransaction(transaction_id);
+  Future<void> DeleteTransaction(StockTransaction transaction) async {
+    await repository.DeleteTransaction(transaction);
     await ReloadHoldings();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+    if (is_drive_signed_in) {
+      SyncWithDrive(); // 背景同步，把墓碑推上雲端
+    }
   }
 
   /// 代號搜尋（手動記帳自動完成）。

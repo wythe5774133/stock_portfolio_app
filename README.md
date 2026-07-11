@@ -35,6 +35,12 @@
 - **大盤比較**：可疊加 S&P 500、那斯達克、台灣加權指數，自動切換為報酬率%模式（時間加權法 TWR，起點歸零公平比較）
 - **雙圓餅圖**：市值配置 vs 成本配置，對照漲跌造成的配置變化
 
+### 雲端同步（選用）
+- **Google Drive 同步**：用自己的 Google 帳號登入後，資料自動同步到你 Drive 的 App 專屬隱藏空間（`drive.appdata` 最小權限，App 看不到你的其他檔案）
+- 多裝置登入同一帳號即雙向合併；刪除透過墓碑機制同步，不會復活
+- 開發者需在 Google Cloud Console 建立免費的 iOS OAuth Client ID 並填入
+  `lib/services/google_drive_sync_service.dart` 與兩個 Info.plist
+
 ### 外觀
 - **背景深淺切換**：淺色／深色／跟隨系統，設定會記住
 - **漲跌配色切換**：美股慣例（漲綠跌紅）／台股慣例（漲紅跌綠）
