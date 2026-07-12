@@ -314,6 +314,17 @@ class PortfolioRepository {
     }
     final DateTime now = DateTime.now();
     final int today = now.year * 10000 + now.month * 100 + now.day;
+
+    // 資料未滿 30 天不顯示 XIRR：期間太短年化會出現數百 % 的無意義數字
+    final int earliest = transactions
+        .map((StockTransaction t) => t.trade_date)
+        .reduce((int a, int b) => a < b ? a : b);
+    final DateTime earliest_date = DateTime(
+        earliest ~/ 10000, (earliest ~/ 100) % 100, earliest % 100);
+    if (now.difference(earliest_date).inDays < 30) {
+      return null;
+    }
+
     final List<(int, double)> cashflows = <(int, double)>[
       for (final StockTransaction tx in transactions)
         (

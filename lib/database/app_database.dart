@@ -3,7 +3,6 @@
 // 由 database_connection.dart 的 OpenConnection() 提供。
 
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
 
 import 'transaction_dao.dart';
 import 'quote_cache_dao.dart';
@@ -133,9 +132,6 @@ class SyncTombstones extends Table {
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
-
-  /// 以記憶體資料庫建立實例，供單元測試使用。
-  AppDatabase.Memory() : super(NativeDatabase.memory());
 
   @override
   int get schemaVersion => 5;

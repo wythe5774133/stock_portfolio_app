@@ -9,6 +9,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../database/historical_price_dao.dart';
 import '../models/ohlcv_candle.dart';
 import 'market_session_resolver.dart';
+import 'yahoo_endpoints.dart';
 import 'yahoo_quote_service.dart';
 
 /*
@@ -87,16 +88,15 @@ class HistoricalPriceService {
 
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
       final Uri uri =
-          Uri.https(host, '/v8/finance/chart/$symbol', <String, String>{
+          BuildYahooUri(host, '/v8/finance/chart/$symbol', <String, String>{
         'period1': '$period1',
         'period2': '$period2',
         'interval': '1d',
       });
       try {
-        final http.Response response = await http_client.get(uri,
-            headers: <String, String>{
-              'User-Agent': YahooQuoteService.USER_AGENT,
-            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        final http.Response response = await http_client
+            .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
+            .timeout(YahooQuoteService.REQUEST_TIMEOUT);
         if (response.statusCode == 429) {
           continue; // 換備援主機
         }
@@ -183,15 +183,14 @@ class HistoricalPriceService {
 
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
       final Uri uri =
-          Uri.https(host, '/v8/finance/chart/$symbol', <String, String>{
+          BuildYahooUri(host, '/v8/finance/chart/$symbol', <String, String>{
         'range': effective_range.yahoo_value,
         'interval': yahoo_interval,
       });
       try {
-        final http.Response response = await http_client.get(uri,
-            headers: <String, String>{
-              'User-Agent': YahooQuoteService.USER_AGENT,
-            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        final http.Response response = await http_client
+            .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
+            .timeout(YahooQuoteService.REQUEST_TIMEOUT);
         if (response.statusCode == 429) {
           continue; // 換備援主機
         }

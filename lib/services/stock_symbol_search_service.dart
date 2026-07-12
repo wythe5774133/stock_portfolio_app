@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../models/stock_news_item.dart';
 import '../models/symbol_search_result.dart';
+import 'yahoo_endpoints.dart';
 import 'yahoo_quote_service.dart';
 
 /*
@@ -51,17 +52,17 @@ class StockSymbolSearchService {
       return <SymbolSearchResult>[];
     }
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
-      final Uri uri = Uri.https(host, '/v1/finance/search', <String, String>{
+      final Uri uri =
+          BuildYahooUri(host, '/v1/finance/search', <String, String>{
         'q': trimmed,
         'quotesCount': '8',
         'newsCount': '0',
         'listsCount': '0',
       });
       try {
-        final http.Response response = await http_client.get(uri,
-            headers: <String, String>{
-              'User-Agent': YahooQuoteService.USER_AGENT,
-            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        final http.Response response = await http_client
+            .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
+            .timeout(YahooQuoteService.REQUEST_TIMEOUT);
         if (response.statusCode == 429) {
           continue; // 換備援主機
         }
@@ -88,17 +89,17 @@ class StockSymbolSearchService {
    */
   Future<List<StockNewsItem>> FetchNewsForSymbol(String symbol) async {
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
-      final Uri uri = Uri.https(host, '/v1/finance/search', <String, String>{
+      final Uri uri =
+          BuildYahooUri(host, '/v1/finance/search', <String, String>{
         'q': symbol,
         'quotesCount': '0',
         'newsCount': '8',
         'listsCount': '0',
       });
       try {
-        final http.Response response = await http_client.get(uri,
-            headers: <String, String>{
-              'User-Agent': YahooQuoteService.USER_AGENT,
-            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        final http.Response response = await http_client
+            .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
+            .timeout(YahooQuoteService.REQUEST_TIMEOUT);
         if (response.statusCode == 429) {
           continue; // 換備援主機
         }

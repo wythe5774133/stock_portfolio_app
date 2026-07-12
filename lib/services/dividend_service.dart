@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../database/dividend_dao.dart';
 import 'market_session_resolver.dart';
+import 'yahoo_endpoints.dart';
 import 'yahoo_quote_service.dart';
 
 /*
@@ -81,17 +82,16 @@ class DividendService {
 
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
       final Uri uri =
-          Uri.https(host, '/v8/finance/chart/$symbol', <String, String>{
+          BuildYahooUri(host, '/v8/finance/chart/$symbol', <String, String>{
         'period1': '$period1',
         'period2': '$period2',
         'interval': '1d',
         'events': 'div',
       });
       try {
-        final http.Response response = await http_client.get(uri,
-            headers: <String, String>{
-              'User-Agent': YahooQuoteService.USER_AGENT,
-            }).timeout(YahooQuoteService.REQUEST_TIMEOUT);
+        final http.Response response = await http_client
+            .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
+            .timeout(YahooQuoteService.REQUEST_TIMEOUT);
         if (response.statusCode == 429) {
           continue; // 換備援主機
         }

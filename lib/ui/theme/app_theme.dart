@@ -127,6 +127,9 @@ ThemeData BuildAppTheme(Brightness brightness) {
     scaffoldBackgroundColor: colors.page_background,
     dialogTheme: DialogThemeData(backgroundColor: colors.card_background),
     popupMenuTheme: PopupMenuThemeData(color: colors.card_background),
+    // 內建 Noto Sans TC（子集化常用繁中字）：全平台（含網頁）字型一致，
+    // 罕用字退回系統字型
+    fontFamily: 'NotoSansTC',
     fontFamilyFallback: const <String>[
       'PingFang TC', // macOS 繁中
       'Microsoft JhengHei', // Windows 繁中

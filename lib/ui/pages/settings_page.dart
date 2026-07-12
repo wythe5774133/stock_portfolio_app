@@ -1,14 +1,13 @@
 // 設定分頁：外觀、資料（股息開關、備份匯出匯入、CSV 匯入）與關於。
 
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
+
+import '../../services/platform_io/backup_saver_io.dart'
+    if (dart.library.js_interop) '../../services/platform_io/backup_saver_web.dart';
 
 import '../../services/backup_service.dart';
 import '../dashboard_controller.dart';
@@ -195,31 +194,11 @@ class SettingsPage extends StatelessWidget {
       final String backup_json = await controller.ExportBackupJson();
       final String file_name = 'stock_portfolio_backup_'
           '${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.json';
-
-      if (Platform.isIOS || Platform.isAndroid) {
-        // 手機：寫入暫存檔後開系統分享面板（存到檔案、AirDrop、雲端皆可）
-        final Directory temp_dir = await getTemporaryDirectory();
-        final File temp_file = File(p.join(temp_dir.path, file_name));
-        await temp_file.writeAsString(backup_json);
-        await SharePlus.instance.share(ShareParams(
-          files: <XFile>[XFile(temp_file.path)],
-          subject: '股票庫存備份',
-        ));
-        return;
+      final bool completed =
+          await SaveBackupToDevice(backup_json, file_name);
+      if (completed) {
+        messenger.showSnackBar(const SnackBar(content: Text('備份已匯出')));
       }
-
-      // 桌面：存檔對話框
-      final FileSaveLocation? location = await getSaveLocation(
-        suggestedName: file_name,
-        acceptedTypeGroups: <XTypeGroup>[
-          const XTypeGroup(label: 'JSON', extensions: <String>['json']),
-        ],
-      );
-      if (location == null) {
-        return; // 使用者取消
-      }
-      await File(location.path).writeAsString(backup_json);
-      messenger.showSnackBar(const SnackBar(content: Text('備份已匯出')));
     } catch (error) {
       messenger.showSnackBar(SnackBar(
         content: Text('匯出失敗：$error'),

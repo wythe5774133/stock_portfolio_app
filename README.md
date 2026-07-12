@@ -3,8 +3,11 @@
 免費、開源的個人美股庫存管理 App，定位介於「記帳軟體」與「投資組合追蹤器」之間。
 匯入券商交易紀錄（或手動記帳）後，自動計算持倉、抓取即時報價，並以圖表呈現資產狀況。
 
-以 Flutter 開發，單一程式碼庫支援 macOS / Windows / Linux / iOS / Android。
-**不需要申請任何 API Key、沒有訂閱費、資料全部存在你自己的電腦上。**
+以 Flutter 開發，單一程式碼庫支援 macOS / Windows / Linux / iOS / Android / **網頁版**。
+**不需要申請任何 API Key、沒有訂閱費、資料全部存在你自己的裝置上。**
+
+🌐 **線上版（免安裝）**：https://stock-portfolio-3ba.pages.dev
+（資料存在瀏覽器本機儲存空間，報價經由 Cloudflare Worker 代理轉發）
 
 ## 功能
 

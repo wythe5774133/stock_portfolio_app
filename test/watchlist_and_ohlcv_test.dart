@@ -2,6 +2,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_portfolio_app/database/app_database.dart';
+
+import 'test_database.dart';
 import 'package:stock_portfolio_app/models/ohlcv_candle.dart';
 import 'package:stock_portfolio_app/services/historical_price_service.dart';
 import 'package:stock_portfolio_app/services/market_session_resolver.dart';
@@ -13,7 +15,7 @@ void main() {
     late AppDatabase database;
 
     setUp(() {
-      database = AppDatabase.Memory();
+      database = CreateTestDatabase();
     });
 
     tearDown(() async {

@@ -3,6 +3,8 @@
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_portfolio_app/database/app_database.dart';
+
+import 'test_database.dart';
 import 'package:stock_portfolio_app/database/tombstone_dao.dart';
 import 'package:stock_portfolio_app/models/stock_transaction.dart';
 import 'package:stock_portfolio_app/services/backup_service.dart';
@@ -20,7 +22,7 @@ void main() {
   late BackupService backup_service;
 
   setUp(() {
-    database = AppDatabase.Memory();
+    database = CreateTestDatabase();
     backup_service = BackupService(database: database);
   });
 
@@ -128,7 +130,7 @@ void main() {
     final String snapshot =
         await backup_service.BuildBackupJson(<String, dynamic>{});
 
-    final AppDatabase other = AppDatabase.Memory();
+    final AppDatabase other = CreateTestDatabase();
     final BackupService other_service = BackupService(database: other);
     await other_service.RestoreFromBackupJson(snapshot);
     final List<WatchlistSymbol> restored =

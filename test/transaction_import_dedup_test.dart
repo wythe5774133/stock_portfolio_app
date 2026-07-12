@@ -4,6 +4,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_portfolio_app/database/app_database.dart';
+
+import 'test_database.dart';
 import 'package:stock_portfolio_app/logic/portfolio_calculator.dart';
 import 'package:stock_portfolio_app/models/holding_position.dart';
 import 'package:stock_portfolio_app/models/stock_transaction.dart';
@@ -15,7 +17,7 @@ void main() {
   late String csv_content;
 
   setUp(() {
-    database = AppDatabase.Memory();
+    database = CreateTestDatabase();
     importer = CsvTransactionImporter();
     csv_content =
         File('test/fixtures/sample_transactions.csv').readAsStringSync();

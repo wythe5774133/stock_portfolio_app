@@ -6,11 +6,13 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../models/market_session.dart';
 import '../models/stock_quote.dart';
 import 'market_session_resolver.dart';
+import 'yahoo_endpoints.dart';
 
 /*
  * @author  Toby
@@ -69,14 +71,18 @@ class YahooQuoteService {
     if (symbols.isEmpty || is_backing_off) {
       return <String, StockQuote>{};
     }
-    try {
-      final Map<String, StockQuote> via_v7 = await _FetchQuotesViaV7(symbols);
-      if (via_v7.isNotEmpty) {
-        _ResetBackoff();
-        return via_v7;
+    // 網頁版跳過 v7（cookie+crumb 流程跨網域不可行），直接走 chart 備援
+    if (!kIsWeb) {
+      try {
+        final Map<String, StockQuote> via_v7 =
+            await _FetchQuotesViaV7(symbols);
+        if (via_v7.isNotEmpty) {
+          _ResetBackoff();
+          return via_v7;
+        }
+      } catch (_) {
+        // 主路徑失敗，走備援
       }
-    } catch (_) {
-      // 主路徑失敗，走備援
     }
 
     try {
@@ -102,11 +108,11 @@ class YahooQuoteService {
       return <String, StockQuote>{};
     }
 
-    final Uri uri = Uri.https('query1.finance.yahoo.com', '/v7/finance/quote',
-        <String, String>{
-          'symbols': symbols.join(','),
-          'crumb': _crumb!,
-        });
+    final Uri uri = BuildYahooUri('query1.finance.yahoo.com',
+        '/v7/finance/quote', <String, String>{
+      'symbols': symbols.join(','),
+      'crumb': _crumb!,
+    });
     final http.Response response = await http_client.get(uri,
         headers: _BuildRequestHeaders()).timeout(REQUEST_TIMEOUT);
 
@@ -143,12 +149,12 @@ class YahooQuoteService {
     final Map<String, StockQuote> quotes = <String, StockQuote>{};
     for (final String symbol in symbols) {
       for (final String host in QUERY_HOSTS) {
-        final Uri uri = Uri.https(host, '/v8/finance/chart/$symbol',
+        final Uri uri = BuildYahooUri(host, '/v8/finance/chart/$symbol',
             <String, String>{
-              'range': '1d',
-              'interval': '1m',
-              'includePrePost': 'true',
-            });
+          'range': '1d',
+          'interval': '1m',
+          'includePrePost': 'true',
+        });
         try {
           final http.Response response = await http_client.get(uri,
               headers: _BuildRequestHeaders()).timeout(REQUEST_TIMEOUT);
@@ -184,7 +190,7 @@ class YahooQuoteService {
       // 步驟 1：向 fc.yahoo.com 要 cookie（回應 404 沒關係，重點是 Set-Cookie）
       final http.Response cookie_response = await http_client
           .get(Uri.https('fc.yahoo.com', '/'),
-              headers: <String, String>{'User-Agent': USER_AGENT})
+              headers: BuildYahooHeaders(USER_AGENT))
           .timeout(REQUEST_TIMEOUT);
       final String? set_cookie = cookie_response.headers['set-cookie'];
       if (set_cookie == null || set_cookie.isEmpty) {
@@ -194,7 +200,9 @@ class YahooQuoteService {
 
       // 步驟 2：帶 cookie 取 crumb
       final http.Response crumb_response = await http_client
-          .get(Uri.https('query1.finance.yahoo.com', '/v1/test/getcrumb'),
+          .get(
+              BuildYahooUri('query1.finance.yahoo.com', '/v1/test/getcrumb',
+                  <String, String>{}),
               headers: _BuildRequestHeaders())
           .timeout(REQUEST_TIMEOUT);
       if (crumb_response.statusCode == 200 &&
@@ -207,12 +215,9 @@ class YahooQuoteService {
     }
   }
 
-  /// 組出帶 User-Agent 與 cookie 的請求標頭。
+  /// 組出帶 User-Agent 與 cookie 的請求標頭（網頁版為空）。
   Map<String, String> _BuildRequestHeaders() {
-    return <String, String>{
-      'User-Agent': USER_AGENT,
-      'Cookie': ?_cookie_header,
-    };
+    return BuildYahooHeaders(USER_AGENT, cookie_header: _cookie_header);
   }
 
   /// 記錄一次失敗並延長退避時間（30s→60s→120s→300s 上限）。

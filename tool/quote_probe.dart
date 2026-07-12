@@ -4,6 +4,7 @@
 // ignore_for_file: avoid_print — 本檔為手動驗證 CLI 工具，print 即輸出介面
 
 import 'package:http/http.dart' as http;
+import 'package:drift/native.dart';
 import 'package:stock_portfolio_app/database/app_database.dart';
 import 'package:stock_portfolio_app/models/stock_quote.dart';
 import 'package:stock_portfolio_app/services/historical_price_service.dart';
@@ -27,7 +28,7 @@ Future<void> main() async {
   }
 
   print('== 歷史日線（近 30 天）==');
-  final AppDatabase database = AppDatabase.Memory();
+  final AppDatabase database = AppDatabase(NativeDatabase.memory());
   final http.Client client = http.Client();
   final HistoricalPriceService history_service = HistoricalPriceService(
     historical_price_dao: database.historicalPriceDao,

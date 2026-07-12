@@ -11,6 +11,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
 import 'package:stock_portfolio_app/database/app_database.dart';
+
+import 'test_database.dart';
 import 'package:stock_portfolio_app/logic/portfolio_repository.dart';
 import 'package:stock_portfolio_app/models/stock_transaction.dart';
 import 'package:stock_portfolio_app/services/app_settings_store.dart';
@@ -56,7 +58,7 @@ void main() {
   late Directory temp_dir;
 
   setUp(() {
-    database = AppDatabase.Memory();
+    database = CreateTestDatabase();
     repository = PortfolioRepository(
       database: database,
       http_client: BuildMockClient(),

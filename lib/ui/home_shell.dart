@@ -1,12 +1,11 @@
 // App 主外殼：響應式導覽——桌面（寬 ≥ 900）用左側導覽欄，
 // 手機用底部分頁列。四個分頁：總覽、持倉、自選、設定。
 
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'dashboard_controller.dart';
+import '../services/platform_io/env_reader.dart';
 import 'pages/holdings_page.dart';
 import 'pages/overview_page.dart';
 import 'pages/settings_page.dart';
@@ -42,7 +41,7 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     // 開發輔助：模擬器 UI 驗證可用環境變數 INITIAL_TAB 指定啟始分頁（0~3）
     final int? initial_tab =
-        int.tryParse(Platform.environment['INITIAL_TAB'] ?? '');
+        int.tryParse(ReadEnvironmentVariable('INITIAL_TAB') ?? '');
     if (initial_tab != null && initial_tab >= 0 && initial_tab <= 3) {
       selected_index = initial_tab;
     }
