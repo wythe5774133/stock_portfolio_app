@@ -6,6 +6,7 @@ import '../dashboard_controller.dart';
 import '../widgets/asset_curve_section.dart';
 import '../widgets/holding_pie_chart.dart';
 import '../widgets/quote_status_banner.dart';
+import '../widgets/portfolio_risk_card.dart';
 import '../widgets/section_card.dart';
 import '../widgets/summary_stat_cards.dart';
 
@@ -62,9 +63,18 @@ class OverviewPage extends StatelessWidget {
                     ? const SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
                     : null,
                 child: AssetCurveSection(controller: controller),
+              ),
+              const SizedBox(height: 14),
+              SectionCard(
+                title: '風險概覽',
+                subtitle: '依目前選擇的資產曲線期間計算',
+                child: PortfolioRiskCard(
+                  metrics: controller.portfolio_risk_metrics,
+                ),
               ),
               const SizedBox(height: 14),
               LayoutBuilder(
@@ -73,9 +83,12 @@ class OverviewPage extends StatelessWidget {
                     title: '持倉配置（依市值）',
                     child: HoldingPieChart(
                       entries: rows
-                          .map((HoldingDisplayRow r) => PieSliceEntry(
+                          .map(
+                            (HoldingDisplayRow r) => PieSliceEntry(
                               label: r.position.symbol,
-                              value: r.market_value))
+                              value: r.market_value,
+                            ),
+                          )
                           .toList(),
                     ),
                   );
@@ -83,18 +96,23 @@ class OverviewPage extends StatelessWidget {
                     title: '成本配置（依投入成本）',
                     child: HoldingPieChart(
                       entries: rows
-                          .map((HoldingDisplayRow r) => PieSliceEntry(
+                          .map(
+                            (HoldingDisplayRow r) => PieSliceEntry(
                               label: r.position.symbol,
-                              value: r.position.total_cost_basis))
+                              value: r.position.total_cost_basis,
+                            ),
+                          )
                           .toList(),
                     ),
                   );
                   if (constraints.maxWidth < 860) {
-                    return Column(children: <Widget>[
-                      market_value_pie,
-                      const SizedBox(height: 14),
-                      cost_pie,
-                    ]);
+                    return Column(
+                      children: <Widget>[
+                        market_value_pie,
+                        const SizedBox(height: 14),
+                        cost_pie,
+                      ],
+                    );
                   }
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,

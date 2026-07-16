@@ -18,13 +18,17 @@ import 'package:stock_portfolio_app/models/stock_transaction.dart';
 import 'package:stock_portfolio_app/services/app_settings_store.dart';
 import 'package:stock_portfolio_app/ui/dashboard_controller.dart';
 import 'package:stock_portfolio_app/ui/home_shell.dart';
+import 'package:stock_portfolio_app/ui/widgets/csv_import_preview_dialog.dart';
 
 /// 模擬 Yahoo：報價成功、其他 429。
 MockClient BuildMockClient() {
   return MockClient((http.Request request) async {
     if (request.url.host == 'fc.yahoo.com') {
-      return http.Response('', 404,
-          headers: <String, String>{'set-cookie': 'A3=d=test; Path=/'});
+      return http.Response(
+        '',
+        404,
+        headers: <String, String>{'set-cookie': 'A3=d=test; Path=/'},
+      );
     }
     if (request.url.path.contains('getcrumb')) {
       return http.Response('TestCrumb', 200);
@@ -33,19 +37,20 @@ MockClient BuildMockClient() {
       final List<String> symbols =
           (request.url.queryParameters['symbols'] ?? '').split(',');
       return http.Response(
-          jsonEncode(<String, dynamic>{
-            'quoteResponse': <String, dynamic>{
-              'result': <dynamic>[
-                for (final String s in symbols)
-                  <String, dynamic>{
-                    'symbol': s,
-                    'regularMarketPrice': 726.41,
-                    'regularMarketPreviousClose': 723.23,
-                  },
-              ],
-            },
-          }),
-          200);
+        jsonEncode(<String, dynamic>{
+          'quoteResponse': <String, dynamic>{
+            'result': <dynamic>[
+              for (final String s in symbols)
+                <String, dynamic>{
+                  'symbol': s,
+                  'regularMarketPrice': 726.41,
+                  'regularMarketPreviousClose': 723.23,
+                },
+            ],
+          },
+        }),
+        200,
+      );
     }
     return http.Response('Too Many Requests', 429);
   });
@@ -92,13 +97,17 @@ void main() {
   }
 
   Future<void> PrepareDataAndPump(WidgetTester tester) async {
-    final String csv_content =
-        File('test/fixtures/sample_transactions.csv').readAsStringSync();
+    final String csv_content = File(
+      'test/fixtures/sample_transactions.csv',
+    ).readAsStringSync();
     await tester.runAsync(() async {
       await controller.InitializeDashboard();
       await controller.ImportCsvContent(csv_content);
-      await controller.AddToWatchlist('QQQ', 'Invesco QQQ Trust',
-          group_name: 'ETF');
+      await controller.AddToWatchlist(
+        'QQQ',
+        'Invesco QQQ Trust',
+        group_name: 'ETF',
+      );
       repository.quote_scheduler.Stop();
     });
     await tester.pumpWidget(BuildTestApp());
@@ -112,12 +121,42 @@ void main() {
     expect(find.byType(NavigationBar), findsOneWidget);
     // 捲到最底確認整頁可渲染
     await tester.drag(
-        find.byType(SingleChildScrollView).first, const Offset(0, -2000));
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -2000),
+    );
     await tester.pump();
+    expect(find.text('風險概覽'), findsOneWidget);
   });
 
-  testWidgets('iPhone 尺寸：持倉分頁展開明細無 overflow',
-      (WidgetTester tester) async {
+  testWidgets('iPhone 尺寸：CSV 匯入預覽與欄位對應無 overflow', (WidgetTester tester) async {
+    SetIphoneViewport(tester);
+    final String csv_content = File(
+      'test/fixtures/sample_transactions.csv',
+    ).readAsStringSync();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            return FilledButton(
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (BuildContext context) => CsvImportPreviewDialog(
+                  csv_content: csv_content,
+                  controller: controller,
+                ),
+              ),
+              child: const Text('開啟預覽'),
+            );
+          },
+        ),
+      ),
+    );
+    await tester.tap(find.text('開啟預覽'));
+    await tester.pumpAndSettle();
+    expect(find.text('確認 CSV 匯入'), findsOneWidget);
+  });
+
+  testWidgets('iPhone 尺寸：持倉分頁展開明細無 overflow', (WidgetTester tester) async {
     SetIphoneViewport(tester);
     await PrepareDataAndPump(tester);
     await tester.tap(find.text('持倉'));
@@ -130,8 +169,9 @@ void main() {
     expect(find.text('交易明細（4 筆）'), findsOneWidget);
   });
 
-  testWidgets('iPhone 尺寸：自選分頁（含分類 chips）無 overflow',
-      (WidgetTester tester) async {
+  testWidgets('iPhone 尺寸：自選分頁（含分類 chips）無 overflow', (
+    WidgetTester tester,
+  ) async {
     SetIphoneViewport(tester);
     await PrepareDataAndPump(tester);
     await tester.tap(find.text('自選'));
@@ -151,20 +191,24 @@ void main() {
     SetIphoneViewport(tester);
     await tester.runAsync(() async {
       await controller.InitializeDashboard();
-      await controller.AddManualTransaction(const StockTransaction(
-        symbol: 'TSLA',
-        trade_date: 20260101,
-        purchase_price: 400,
-        quantity: 2,
-        transaction_type: TransactionType.buy,
-      ));
-      await controller.AddManualTransaction(const StockTransaction(
-        symbol: 'TSLA',
-        trade_date: 20260201,
-        purchase_price: 410,
-        quantity: 1,
-        transaction_type: TransactionType.buy,
-      ));
+      await controller.AddManualTransaction(
+        const StockTransaction(
+          symbol: 'TSLA',
+          trade_date: 20260101,
+          purchase_price: 400,
+          quantity: 2,
+          transaction_type: TransactionType.buy,
+        ),
+      );
+      await controller.AddManualTransaction(
+        const StockTransaction(
+          symbol: 'TSLA',
+          trade_date: 20260201,
+          purchase_price: 410,
+          quantity: 1,
+          transaction_type: TransactionType.buy,
+        ),
+      );
       repository.quote_scheduler.Stop();
     });
     await tester.pumpWidget(BuildTestApp());
@@ -182,7 +226,8 @@ void main() {
     expect(find.text('刪除交易'), findsOneWidget);
     await tester.tap(find.text('刪除'));
     await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      () => Future<void>.delayed(const Duration(milliseconds: 100)),
+    );
     await tester.pumpAndSettle();
 
     // 剩 1 筆交易、持股 2 股

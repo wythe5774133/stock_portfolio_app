@@ -5,6 +5,7 @@ import 'dart:math' as math;
 
 import '../models/holding_position.dart';
 import '../models/portfolio_snapshot.dart';
+import '../models/portfolio_risk_metrics.dart';
 import '../models/stock_transaction.dart';
 
 /*
@@ -39,7 +40,8 @@ class PortfolioCalculator {
    *  @note    賣出量若超過目前持有量（含容差），該筆跳過不影響其餘計算。
    */
   List<HoldingPosition> CalculateHoldingPositions(
-      List<StockTransaction> transactions) {
+    List<StockTransaction> transactions,
+  ) {
     final Map<String, List<StockTransaction>> grouped =
         GroupTransactionsBySymbol(transactions);
 
@@ -60,8 +62,9 @@ class PortfolioCalculator {
           if (tx.quantity > total_quantity + QUANTITY_EPSILON) {
             continue;
           }
-          final double average_cost =
-              total_quantity > QUANTITY_EPSILON ? total_cost / total_quantity : 0.0;
+          final double average_cost = total_quantity > QUANTITY_EPSILON
+              ? total_cost / total_quantity
+              : 0.0;
           realized_pnl += (tx.purchase_price - average_cost) * tx.quantity;
           total_cost -= average_cost * tx.quantity;
           total_quantity -= tx.quantity;
@@ -73,16 +76,19 @@ class PortfolioCalculator {
         }
       }
 
-      final double average_cost =
-          total_quantity > QUANTITY_EPSILON ? total_cost / total_quantity : 0.0;
-      positions.add(HoldingPosition(
-        symbol: symbol,
-        net_quantity: total_quantity,
-        average_cost: average_cost,
-        total_cost_basis: total_cost,
-        realized_pnl: realized_pnl,
-        transactions: symbol_transactions,
-      ));
+      final double average_cost = total_quantity > QUANTITY_EPSILON
+          ? total_cost / total_quantity
+          : 0.0;
+      positions.add(
+        HoldingPosition(
+          symbol: symbol,
+          net_quantity: total_quantity,
+          average_cost: average_cost,
+          total_cost_basis: total_cost,
+          realized_pnl: realized_pnl,
+          transactions: symbol_transactions,
+        ),
+      );
     }
     return positions;
   }
@@ -152,8 +158,9 @@ class PortfolioCalculator {
             // 尚無歷史價時以買入價當作已知價格起點
             last_known_price.putIfAbsent(symbol, () => tx.purchase_price);
           } else if (tx.quantity <= quantity + QUANTITY_EPSILON) {
-            final double average_cost =
-                quantity > QUANTITY_EPSILON ? cost / quantity : 0.0;
+            final double average_cost = quantity > QUANTITY_EPSILON
+                ? cost / quantity
+                : 0.0;
             double new_quantity = quantity - tx.quantity;
             double new_cost = cost - average_cost * tx.quantity;
             if (new_quantity < QUANTITY_EPSILON) {
@@ -184,12 +191,14 @@ class PortfolioCalculator {
         }
       }
 
-      snapshots.add(PortfolioSnapshot(
-        date: date,
-        total_market_value: total_market_value,
-        total_cost_basis: total_cost_basis,
-        net_cash_flow: day_cash_flow,
-      ));
+      snapshots.add(
+        PortfolioSnapshot(
+          date: date,
+          total_market_value: total_market_value,
+          total_cost_basis: total_cost_basis,
+          net_cash_flow: day_cash_flow,
+        ),
+      );
 
       cursor = cursor.add(const Duration(days: 1));
     }
@@ -236,25 +245,114 @@ class PortfolioCalculator {
    *           如此新投入的本金不會被誤算成獲利，可與大盤指數公平比較。
    */
   List<double> CalculateCumulativeReturnPercentSeries(
-      List<PortfolioSnapshot> range_snapshots) {
+    List<PortfolioSnapshot> range_snapshots,
+  ) {
     final List<double> percents = <double>[];
     double cumulative_factor = 1.0;
     for (int i = 0; i < range_snapshots.length; i++) {
       if (i > 0) {
-        final double previous_value =
-            range_snapshots[i - 1].total_market_value;
+        final double previous_value = range_snapshots[i - 1].total_market_value;
         final double flow = range_snapshots[i].net_cash_flow;
         final double denominator = previous_value + flow;
         if (denominator > QUANTITY_EPSILON) {
           final double daily_return =
               (range_snapshots[i].total_market_value - previous_value - flow) /
-                  denominator;
+              denominator;
           cumulative_factor *= (1 + daily_return);
         }
       }
       percents.add((cumulative_factor - 1) * 100);
     }
     return percents;
+  }
+
+  /// 依目前持倉市值與歷史快照計算集中度、最大回撤及年化波動率。
+  PortfolioRiskMetrics CalculatePortfolioRiskMetrics(
+    List<PortfolioSnapshot> snapshots,
+    Map<String, double> market_value_by_symbol,
+  ) {
+    String? largest_symbol;
+    double largest_value = 0.0;
+    double total_value = 0.0;
+    for (final MapEntry<String, double> entry
+        in market_value_by_symbol.entries) {
+      if (entry.value <= 0) {
+        continue;
+      }
+      total_value += entry.value;
+      if (entry.value > largest_value) {
+        largest_value = entry.value;
+        largest_symbol = entry.key;
+      }
+    }
+    final double? largest_weight = total_value > QUANTITY_EPSILON
+        ? largest_value / total_value * 100
+        : null;
+
+    if (snapshots.length < 2) {
+      return PortfolioRiskMetrics(
+        largest_position_symbol: largest_symbol,
+        largest_position_weight_percent: largest_weight,
+        maximum_drawdown_percent: null,
+        annualized_volatility_percent: null,
+      );
+    }
+
+    final List<double> daily_returns = <double>[];
+    double cumulative_factor = 1.0;
+    double peak_factor = 1.0;
+    double maximum_drawdown = 0.0;
+    for (int i = 1; i < snapshots.length; i++) {
+      final PortfolioSnapshot previous = snapshots[i - 1];
+      final PortfolioSnapshot current = snapshots[i];
+      final double denominator =
+          previous.total_market_value + current.net_cash_flow;
+      if (denominator <= QUANTITY_EPSILON) {
+        continue;
+      }
+      final double daily_return =
+          (current.total_market_value -
+              previous.total_market_value -
+              current.net_cash_flow) /
+          denominator;
+      if (!daily_return.isFinite || daily_return <= -1) {
+        continue;
+      }
+      cumulative_factor *= 1 + daily_return;
+      peak_factor = math.max(peak_factor, cumulative_factor);
+      final double drawdown = cumulative_factor / peak_factor - 1;
+      maximum_drawdown = math.min(maximum_drawdown, drawdown);
+
+      final DateTime date = ConvertYyyymmddToDateTime(current.date);
+      if (date.weekday <= DateTime.friday) {
+        daily_returns.add(daily_return);
+      }
+    }
+
+    double? annualized_volatility;
+    // 至少約一個交易月，避免少量資料顯示沒有代表性的波動率。
+    if (daily_returns.length >= 20) {
+      final double mean =
+          daily_returns.fold<double>(
+            0.0,
+            (double sum, double value) => sum + value,
+          ) /
+          daily_returns.length;
+      final double variance =
+          daily_returns.fold<double>(
+            0.0,
+            (double sum, double value) => sum + math.pow(value - mean, 2),
+          ) /
+          (daily_returns.length - 1);
+      annualized_volatility = math.sqrt(variance) * math.sqrt(252) * 100;
+    }
+
+    return PortfolioRiskMetrics(
+      largest_position_symbol: largest_symbol,
+      largest_position_weight_percent: largest_weight,
+      maximum_drawdown_percent: maximum_drawdown * 100,
+      annualized_volatility_percent: annualized_volatility,
+    );
   }
 
   /*
@@ -270,7 +368,9 @@ class PortfolioCalculator {
    *           非交易日沿用前一個收盤，以第一個有資料的日期為 0% 基準
    */
   static List<double?> BuildBenchmarkReturnPercentSeries(
-      Map<int, double> closes_by_date, List<int> dates) {
+    Map<int, double> closes_by_date,
+    List<int> dates,
+  ) {
     final List<double?> percents = <double?>[];
     double? base_close;
     double? last_close;
@@ -359,25 +459,28 @@ class PortfolioCalculator {
     if (dated_cashflows.length < 2) {
       return null;
     }
-    final bool has_negative =
-        dated_cashflows.any(((int, double) cf) => cf.$2 < 0);
-    final bool has_positive =
-        dated_cashflows.any(((int, double) cf) => cf.$2 > 0);
+    final bool has_negative = dated_cashflows.any(
+      ((int, double) cf) => cf.$2 < 0,
+    );
+    final bool has_positive = dated_cashflows.any(
+      ((int, double) cf) => cf.$2 > 0,
+    );
     if (!has_negative || !has_positive) {
       return null;
     }
 
-    final DateTime first_date = ConvertYyyymmddToDateTime(dated_cashflows
-        .map(((int, double) cf) => cf.$1)
-        .reduce((int a, int b) => a < b ? a : b));
+    final DateTime first_date = ConvertYyyymmddToDateTime(
+      dated_cashflows
+          .map(((int, double) cf) => cf.$1)
+          .reduce((int a, int b) => a < b ? a : b),
+    );
 
     // 現金流淨現值函數
     double EvaluateNetPresentValue(double rate) {
       double total = 0.0;
       for (final (int, double) cf in dated_cashflows) {
-        final double years = ConvertYyyymmddToDateTime(cf.$1)
-                .difference(first_date)
-                .inDays /
+        final double years =
+            ConvertYyyymmddToDateTime(cf.$1).difference(first_date).inDays /
             365.0;
         total += cf.$2 / _Power(1 + rate, years);
       }
@@ -417,7 +520,8 @@ class PortfolioCalculator {
 
   /// 依代號分組並依 (trade_date, id) 升冪排序。
   Map<String, List<StockTransaction>> GroupTransactionsBySymbol(
-      List<StockTransaction> transactions) {
+    List<StockTransaction> transactions,
+  ) {
     final Map<String, List<StockTransaction>> grouped =
         <String, List<StockTransaction>>{};
     for (final StockTransaction tx in transactions) {
@@ -438,7 +542,10 @@ class PortfolioCalculator {
   /// yyyyMMdd 整數轉 UTC DateTime（僅日期，時間為 00:00）。
   static DateTime ConvertYyyymmddToDateTime(int yyyymmdd) {
     return DateTime.utc(
-        yyyymmdd ~/ 10000, (yyyymmdd ~/ 100) % 100, yyyymmdd % 100);
+      yyyymmdd ~/ 10000,
+      (yyyymmdd ~/ 100) % 100,
+      yyyymmdd % 100,
+    );
   }
 
   /// DateTime 轉 yyyyMMdd 整數。

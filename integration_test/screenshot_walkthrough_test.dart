@@ -10,6 +10,8 @@ import 'package:stock_portfolio_app/database/app_database.dart';
 import 'package:stock_portfolio_app/database/database_connection.dart';
 import 'package:stock_portfolio_app/main.dart' as app;
 import 'package:stock_portfolio_app/services/csv_transaction_importer.dart';
+import 'package:stock_portfolio_app/ui/pages/holdings_page.dart';
+import 'package:stock_portfolio_app/ui/widgets/csv_import_preview_dialog.dart';
 
 /// 走查用的範例交易（與 test/fixtures 相同內容）。
 const String WALKTHROUGH_CSV = '''
@@ -28,12 +30,22 @@ GOOG,201.44,2026/07/10,16:00 EDT,-0.88,202.0,203.5,200.7,18203662,20260115,192.3
 /// 啟動 App 前先灌測試資料（flutter drive 重裝 App 會清掉容器資料）。
 Future<void> SeedWalkthroughData() async {
   final AppDatabase database = AppDatabase(OpenConnection());
-  await CsvTransactionImporter()
-      .ImportCsvIntoDatabase(WALKTHROUGH_CSV, database.transactionDao);
-  await database.watchlistDao
-      .AddSymbol('QQQ', 'Invesco QQQ Trust', 1, group_name: 'ETF');
-  await database.watchlistDao
-      .AddSymbol('TSM', 'Taiwan Semiconductor', 2, group_name: 'AI 概念股');
+  await CsvTransactionImporter().ImportCsvIntoDatabase(
+    WALKTHROUGH_CSV,
+    database.transactionDao,
+  );
+  await database.watchlistDao.AddSymbol(
+    'QQQ',
+    'Invesco QQQ Trust',
+    1,
+    group_name: 'ETF',
+  );
+  await database.watchlistDao.AddSymbol(
+    'TSM',
+    'Taiwan Semiconductor',
+    2,
+    group_name: 'AI 概念股',
+  );
   await database.close();
 }
 
@@ -50,15 +62,42 @@ void main() {
 
     await binding.takeScreenshot('tab0_overview');
 
-    // 捲到總覽底部（圓餅圖＋配置明細）
+    // 捲到資產曲線下方，檢查風險概覽。
     await tester.drag(
-        find.byType(SingleChildScrollView).first, const Offset(0, -1600));
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -950),
+    );
+    await tester.pump(const Duration(milliseconds: 600));
+    await binding.takeScreenshot('tab0_risk_overview');
+
+    // 繼續捲到總覽底部（圓餅圖＋配置明細）
+    await tester.drag(
+      find.byType(SingleChildScrollView).first,
+      const Offset(0, -1200),
+    );
     await tester.pump(const Duration(milliseconds: 600));
     await binding.takeScreenshot('tab0_overview_bottom');
 
     await tester.tap(find.text('持倉'));
     await tester.pump(const Duration(seconds: 1));
     await binding.takeScreenshot('tab1_holdings');
+
+    // 直接開啟匯入預覽，避免整合測試依賴原生檔案選取器。
+    final HoldingsPage holdings_page = tester.widget<HoldingsPage>(
+      find.byType(HoldingsPage),
+    );
+    showDialog<CsvColumnMapping>(
+      context: tester.element(find.byType(HoldingsPage)),
+      builder: (BuildContext context) => CsvImportPreviewDialog(
+        csv_content: WALKTHROUGH_CSV,
+        controller: holdings_page.controller,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('確認 CSV 匯入'), findsOneWidget);
+    await binding.takeScreenshot('tab1_csv_import_preview');
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
 
     // 展開第一檔持倉看明細
     final Finder first_tile = find.byType(ExpansionTile).first;
