@@ -52,12 +52,12 @@ class BackupService {
    *  @return  美化排版的 JSON 備份內容
    */
   Future<String> BuildBackupJson(Map<String, dynamic> settings) async {
-    final List<StockTransaction> transactions =
-        await database.transactionDao.GetAllTransactions();
-    final List<WatchlistSymbol> watchlist =
-        await database.watchlistDao.GetAllSymbols();
-    final List<SyncTombstone> tombstones =
-        await database.tombstoneDao.GetAllTombstones();
+    final List<StockTransaction> transactions = await database.transactionDao
+        .GetAllTransactions();
+    final List<WatchlistSymbol> watchlist = await database.watchlistDao
+        .GetAllSymbols();
+    final List<SyncTombstone> tombstones = await database.tombstoneDao
+        .GetAllTombstones();
 
     final Map<String, dynamic> backup = <String, dynamic>{
       'format_version': FORMAT_VERSION,
@@ -107,8 +107,7 @@ class BackupService {
    *
    *  @return  合併結果統計；格式不符時拋出 FormatException
    */
-  Future<BackupRestoreSummary> RestoreFromBackupJson(
-      String backup_json) async {
+  Future<BackupRestoreSummary> RestoreFromBackupJson(String backup_json) async {
     final Map<String, dynamic> backup;
     try {
       backup = jsonDecode(backup_json) as Map<String, dynamic>;
@@ -116,10 +115,31 @@ class BackupService {
       throw const FormatException('不是有效的 JSON 檔案');
     }
     if (backup['app'] != 'stock_portfolio_app' ||
-        backup['format_version'] is! int) {
+        backup['format_version'] != FORMAT_VERSION) {
       throw const FormatException('不是本 App 的備份檔');
     }
 
+    final dynamic raw_transactions = backup['transactions'];
+    final dynamic raw_watchlist = backup['watchlist'];
+    final dynamic raw_tombstones = backup['tombstones'];
+    final dynamic raw_settings = backup['settings'];
+    if ((raw_transactions != null && raw_transactions is! List<dynamic>) ||
+        (raw_watchlist != null && raw_watchlist is! List<dynamic>) ||
+        (raw_tombstones != null && raw_tombstones is! List<dynamic>) ||
+        (raw_settings != null && raw_settings is! Map<String, dynamic>)) {
+      throw const FormatException('備份檔欄位格式不正確');
+    }
+
+    // 匯入包含多張表的新增與刪除，必須全成全敗，避免中途失敗留下半套資料。
+    return database.transaction<BackupRestoreSummary>(() async {
+      return _RestoreValidatedBackup(backup);
+    });
+  }
+
+  /// 將已完成基本格式驗證的備份套用至目前 transaction。
+  Future<BackupRestoreSummary> _RestoreValidatedBackup(
+    Map<String, dynamic> backup,
+  ) async {
     // 步驟 1：先合併墓碑（遠端刪過的東西，本地也要刪掉且不再匯入）
     final List<dynamic> remote_tombstones =
         (backup['tombstones'] as List<dynamic>?) ?? <dynamic>[];
@@ -154,8 +174,9 @@ class BackupService {
       if (raw is! Map<String, dynamic>) {
         continue;
       }
-      final TransactionType? type =
-          ParseTransactionType((raw['transaction_type'] as String?) ?? '');
+      final TransactionType? type = ParseTransactionType(
+        (raw['transaction_type'] as String?) ?? '',
+      );
       final String? symbol = raw['symbol'] as String?;
       final int? trade_date = raw['trade_date'] as int?;
       final num? price = raw['purchase_price'] as num?;
@@ -176,8 +197,9 @@ class BackupService {
         commission: (raw['commission'] as num?)?.toDouble(),
         comment: raw['comment'] as String?,
       );
-      if (transaction_tombstones
-          .contains(TombstoneDao.BuildTransactionKey(transaction))) {
+      if (transaction_tombstones.contains(
+        TombstoneDao.BuildTransactionKey(transaction),
+      )) {
         continue; // 這筆已被某台裝置刪除，不復活
       }
       final bool inserted = await database.transactionDao
@@ -212,15 +234,15 @@ class BackupService {
       transactions_added: added,
       transactions_duplicated: duplicated,
       watchlist_added: watchlist_added,
-      settings: (backup['settings'] as Map<String, dynamic>?) ??
-          <String, dynamic>{},
+      settings:
+          (backup['settings'] as Map<String, dynamic>?) ?? <String, dynamic>{},
     );
   }
 
   /// 依墓碑鍵刪除本地交易（找出符合唯一鍵的那筆）。
   Future<void> _DeleteLocalTransactionByKey(String item_key) async {
-    final List<StockTransaction> all =
-        await database.transactionDao.GetAllTransactions();
+    final List<StockTransaction> all = await database.transactionDao
+        .GetAllTransactions();
     for (final StockTransaction tx in all) {
       if (TombstoneDao.BuildTransactionKey(tx) == item_key && tx.id != null) {
         await database.transactionDao.DeleteTransactionById(tx.id!);

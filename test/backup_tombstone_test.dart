@@ -40,8 +40,8 @@ void main() {
     final String old_snapshot = await BuildSnapshotWithSampleTx();
 
     // 刪除並留墓碑（模擬 repository.DeleteTransaction 的行為）
-    final List<StockTransaction> all =
-        await database.transactionDao.GetAllTransactions();
+    final List<StockTransaction> all = await database.transactionDao
+        .GetAllTransactions();
     await database.transactionDao.DeleteTransactionById(all.single.id!);
     await database.tombstoneDao.AddTombstone(
       TombstoneDao.KIND_TRANSACTION,
@@ -59,7 +59,8 @@ void main() {
     await database.transactionDao.InsertIgnoreTransaction(SAMPLE_TX);
 
     // 遠端快照：沒有交易、但帶著這筆的墓碑（另一台裝置刪的）
-    final String remote_snapshot = '''
+    final String remote_snapshot =
+        '''
 {
   "format_version": 1,
   "app": "stock_portfolio_app",
@@ -76,8 +77,9 @@ void main() {
     await backup_service.RestoreFromBackupJson(remote_snapshot);
     expect(await database.transactionDao.GetAllTransactions(), isEmpty);
     // 墓碑也保存下來，之後推快照會帶著走
-    final Set<String> keys = await database.tombstoneDao
-        .GetTombstoneKeys(TombstoneDao.KIND_TRANSACTION);
+    final Set<String> keys = await database.tombstoneDao.GetTombstoneKeys(
+      TombstoneDao.KIND_TRANSACTION,
+    );
     expect(keys, contains(TombstoneDao.BuildTransactionKey(SAMPLE_TX)));
   });
 
@@ -108,8 +110,9 @@ void main() {
       TombstoneDao.KIND_TRANSACTION,
       TombstoneDao.BuildTransactionKey(SAMPLE_TX),
     );
-    final String snapshot =
-        await backup_service.BuildBackupJson(<String, dynamic>{});
+    final String snapshot = await backup_service.BuildBackupJson(
+      <String, dynamic>{},
+    );
     expect(snapshot, contains('"tombstones"'));
     expect(snapshot, contains('NVDA|20260310'));
 
@@ -119,23 +122,81 @@ void main() {
       TombstoneDao.KIND_TRANSACTION,
       TombstoneDao.BuildTransactionKey(SAMPLE_TX),
     );
-    final Set<String> keys = await database.tombstoneDao
-        .GetTombstoneKeys(TombstoneDao.KIND_TRANSACTION);
+    final Set<String> keys = await database.tombstoneDao.GetTombstoneKeys(
+      TombstoneDao.KIND_TRANSACTION,
+    );
     expect(keys, isEmpty);
   });
 
   test('追蹤清單分類經快照往返保留', () async {
-    await database.watchlistDao
-        .AddSymbol('TSM', 'Taiwan Semiconductor', 1, group_name: 'AI 概念股');
-    final String snapshot =
-        await backup_service.BuildBackupJson(<String, dynamic>{});
+    await database.watchlistDao.AddSymbol(
+      'TSM',
+      'Taiwan Semiconductor',
+      1,
+      group_name: 'AI 概念股',
+    );
+    final String snapshot = await backup_service.BuildBackupJson(
+      <String, dynamic>{},
+    );
 
     final AppDatabase other = CreateTestDatabase();
     final BackupService other_service = BackupService(database: other);
     await other_service.RestoreFromBackupJson(snapshot);
-    final List<WatchlistSymbol> restored =
-        await other.watchlistDao.GetAllSymbols();
+    final List<WatchlistSymbol> restored = await other.watchlistDao
+        .GetAllSymbols();
     expect(restored.single.group_name, 'AI 概念股');
     await other.close();
+  });
+
+  test('未知備份版本在異動資料前即拒絕', () async {
+    const String future_backup = '''
+{"format_version": 99, "app": "stock_portfolio_app",
+ "transactions": [], "watchlist": [], "tombstones": [], "settings": {}}
+''';
+    expect(
+      () => backup_service.RestoreFromBackupJson(future_backup),
+      throwsFormatException,
+    );
+    expect(await database.transactionDao.GetAllTransactions(), isEmpty);
+  });
+
+  test('欄位型別錯誤在異動資料前即拒絕', () async {
+    const String malformed_backup = '''
+{"format_version": 1, "app": "stock_portfolio_app",
+ "transactions": "not-a-list", "watchlist": [], "tombstones": [], "settings": {}}
+''';
+    expect(
+      () => backup_service.RestoreFromBackupJson(malformed_backup),
+      throwsFormatException,
+    );
+    expect(await database.transactionDao.GetAllTransactions(), isEmpty);
+  });
+
+  test('匯入中途遇到壞資料時整批 rollback', () async {
+    await database.transactionDao.InsertIgnoreTransaction(SAMPLE_TX);
+    final String key = TombstoneDao.BuildTransactionKey(SAMPLE_TX);
+    final String partially_invalid_backup =
+        '''
+{"format_version": 1, "app": "stock_portfolio_app",
+ "tombstones": [{"kind": "transaction", "item_key": "$key"}],
+ "transactions": [{"symbol": "AAPL", "trade_date": 20260101,
+   "purchase_price": 200, "quantity": 1, "transaction_type": "BUY",
+   "commission": "invalid"}],
+ "watchlist": [], "settings": {}}
+''';
+
+    expect(
+      () => backup_service.RestoreFromBackupJson(partially_invalid_backup),
+      throwsA(anything),
+    );
+    final List<StockTransaction> remaining = await database.transactionDao
+        .GetAllTransactions();
+    expect(remaining.single.symbol, SAMPLE_TX.symbol);
+    expect(
+      await database.tombstoneDao.GetTombstoneKeys(
+        TombstoneDao.KIND_TRANSACTION,
+      ),
+      isEmpty,
+    );
   });
 }

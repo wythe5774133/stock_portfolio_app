@@ -7,8 +7,12 @@ import 'package:stock_portfolio_app/models/portfolio_snapshot.dart';
 import 'package:stock_portfolio_app/models/stock_transaction.dart';
 
 /// 建立測試快照的簡便函式。
-PortfolioSnapshot MakeSnapshot(int date, double mv, double cost,
-    {double flow = 0}) {
+PortfolioSnapshot MakeSnapshot(
+  int date,
+  double mv,
+  double cost, {
+  double flow = 0,
+}) {
   return PortfolioSnapshot(
     date: date,
     total_market_value: mv,
@@ -24,25 +28,28 @@ void main() {
     test('買入日記正的淨投入、賣出日記負的（賣出所得）', () {
       final List<StockTransaction> transactions = <StockTransaction>[
         const StockTransaction(
-            symbol: 'A',
-            trade_date: 20260101,
-            purchase_price: 100,
-            quantity: 2,
-            transaction_type: TransactionType.buy),
+          symbol: 'A',
+          trade_date: 20260101,
+          purchase_price: 100,
+          quantity: 2,
+          transaction_type: TransactionType.buy,
+        ),
         const StockTransaction(
-            symbol: 'A',
-            trade_date: 20260103,
-            purchase_price: 110,
-            quantity: 1,
-            transaction_type: TransactionType.sell),
+          symbol: 'A',
+          trade_date: 20260103,
+          purchase_price: 110,
+          quantity: 1,
+          transaction_type: TransactionType.sell,
+        ),
       ];
       final List<PortfolioSnapshot> snapshots =
           calculator.CalculateDailyPortfolioHistory(
-              transactions,
-              <String, Map<int, double>>{
-            'A': <int, double>{20260101: 100, 20260102: 105, 20260103: 110},
-          },
-              20260103);
+            transactions,
+            <String, Map<int, double>>{
+              'A': <int, double>{20260101: 100, 20260102: 105, 20260103: 110},
+            },
+            20260103,
+          );
       expect(snapshots[0].net_cash_flow, closeTo(200, 1e-9)); // 買入 2×100
       expect(snapshots[1].net_cash_flow, closeTo(0, 1e-9));
       expect(snapshots[2].net_cash_flow, closeTo(-110, 1e-9)); // 賣出 1×110
@@ -82,9 +89,11 @@ void main() {
     test('快照不足兩筆回傳 0', () {
       expect(calculator.CalculatePeriodPnl(<PortfolioSnapshot>[]), 0);
       expect(
-          calculator
-              .CalculatePeriodPnl(<PortfolioSnapshot>[MakeSnapshot(1, 1, 1)]),
-          0);
+        calculator.CalculatePeriodPnl(<PortfolioSnapshot>[
+          MakeSnapshot(1, 1, 1),
+        ]),
+        0,
+      );
     });
   });
 
@@ -150,8 +159,57 @@ void main() {
     test('完全無資料：全 null', () {
       final List<double?> series =
           PortfolioCalculator.BuildBenchmarkReturnPercentSeries(
-              <int, double>{}, <int>[20260101, 20260102]);
+            <int, double>{},
+            <int>[20260101, 20260102],
+          );
       expect(series.every((double? v) => v == null), isTrue);
+    });
+  });
+
+  group('CalculatePortfolioRiskMetrics - 組合風險', () {
+    test('計算最大持倉集中度與最大回撤', () {
+      final List<PortfolioSnapshot> snapshots = <PortfolioSnapshot>[
+        MakeSnapshot(20260101, 100, 100),
+        MakeSnapshot(20260102, 120, 100),
+        MakeSnapshot(20260103, 90, 100),
+      ];
+      final metrics = calculator.CalculatePortfolioRiskMetrics(
+        snapshots,
+        <String, double>{'NVDA': 75, 'VOO': 25},
+      );
+      expect(metrics.largest_position_symbol, 'NVDA');
+      expect(metrics.largest_position_weight_percent, closeTo(75, 1e-9));
+      expect(metrics.maximum_drawdown_percent, closeTo(-25, 1e-9));
+      expect(metrics.annualized_volatility_percent, isNull);
+    });
+
+    test('滿 20 個交易日後提供年化波動率', () {
+      final List<PortfolioSnapshot> snapshots = <PortfolioSnapshot>[];
+      DateTime date = DateTime.utc(2026, 1, 1);
+      double value = 100.0;
+      snapshots.add(MakeSnapshot(20260101, value, 100));
+      int market_days = 0;
+      while (market_days < 20) {
+        date = date.add(const Duration(days: 1));
+        if (date.weekday > DateTime.friday) {
+          continue;
+        }
+        value *= market_days.isEven ? 1.01 : 0.99;
+        snapshots.add(
+          MakeSnapshot(
+            PortfolioCalculator.ConvertDateTimeToYyyymmdd(date),
+            value,
+            100,
+          ),
+        );
+        market_days++;
+      }
+      final metrics = calculator.CalculatePortfolioRiskMetrics(
+        snapshots,
+        <String, double>{},
+      );
+      expect(metrics.annualized_volatility_percent, isNotNull);
+      expect(metrics.annualized_volatility_percent!, greaterThan(0));
     });
   });
 }

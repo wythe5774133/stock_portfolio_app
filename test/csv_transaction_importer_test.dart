@@ -13,8 +13,9 @@ void main() {
     late CsvParseResult result;
 
     setUpAll(() {
-      final String csv_content =
-          File('test/fixtures/sample_transactions.csv').readAsStringSync();
+      final String csv_content = File(
+        'test/fixtures/sample_transactions.csv',
+      ).readAsStringSync();
       result = importer.ParseCsvTransactions(csv_content);
     });
 
@@ -33,10 +34,10 @@ void main() {
     });
 
     test('SELL 列正確解析', () {
-      final StockTransaction sell = result.transactions
-          .firstWhere((StockTransaction t) =>
-              t.transaction_type == TransactionType.sell &&
-              t.symbol == 'NVDA');
+      final StockTransaction sell = result.transactions.firstWhere(
+        (StockTransaction t) =>
+            t.transaction_type == TransactionType.sell && t.symbol == 'NVDA',
+      );
       expect(sell.trade_date, 20260613);
       expect(sell.purchase_price, closeTo(205.0, 1e-9));
       expect(sell.quantity, closeTo(0.41538, 1e-9));
@@ -76,8 +77,9 @@ void main() {
     });
 
     test('標題列缺少必要欄位時整體回報錯誤', () {
-      final CsvParseResult result =
-          importer.ParseCsvTransactions('Symbol,Foo\nNVDA,1');
+      final CsvParseResult result = importer.ParseCsvTransactions(
+        'Symbol,Foo\nNVDA,1',
+      );
       expect(result.transactions, isEmpty);
       expect(result.skipped_rows.length, 1);
       expect(result.skipped_rows.first.reason, contains('必要欄位'));
@@ -102,6 +104,42 @@ void main() {
       expect(CsvTransactionImporter.ParseTradeDate('20261307'), isNull);
       expect(CsvTransactionImporter.ParseTradeDate('20260732'), isNull);
       expect(CsvTransactionImporter.ParseTradeDate('abc'), isNull);
+    });
+  });
+
+  group('欄位對應與常見別名', () {
+    test('可自動辨識繁中標題', () {
+      const String csv_content =
+          '股票代號,交易日期,成交價,股數,買賣別,手續費,備註\n'
+          'AAPL,2026-01-02,200,2,BUY,1.5,首次買入';
+      final List<String> headers = importer.GetCsvHeaders(csv_content);
+      final CsvColumnMapping mapping = importer.SuggestColumnMapping(headers);
+      final CsvParseResult result = importer.ParseCsvTransactions(
+        csv_content,
+        column_mapping: mapping,
+      );
+      expect(mapping.has_required_columns, isTrue);
+      expect(result.transactions.single.symbol, 'AAPL');
+      expect(result.transactions.single.commission, 1.5);
+      expect(result.transactions.single.comment, '首次買入');
+    });
+
+    test('可手動對應非標準欄位名稱', () {
+      const String csv_content =
+          'code,when,unit_price,shares,side\nTSLA,20260103,400,3,SELL';
+      const CsvColumnMapping mapping = CsvColumnMapping(
+        symbol: 'code',
+        trade_date: 'when',
+        purchase_price: 'unit_price',
+        quantity: 'shares',
+        transaction_type: 'side',
+      );
+      final CsvParseResult result = importer.ParseCsvTransactions(
+        csv_content,
+        column_mapping: mapping,
+      );
+      expect(result.transactions.single.symbol, 'TSLA');
+      expect(result.transactions.single.transaction_type, TransactionType.sell);
     });
   });
 }

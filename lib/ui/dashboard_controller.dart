@@ -9,6 +9,7 @@ import '../logic/portfolio_repository.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/portfolio_snapshot.dart';
+import '../models/portfolio_risk_metrics.dart';
 import '../models/stock_quote.dart';
 import '../models/stock_transaction.dart';
 import '../models/symbol_search_result.dart';
@@ -163,9 +164,9 @@ class DashboardController extends ChangeNotifier {
   Future<void> InitializeDashboard() async {
     final Map<String, dynamic> settings = await settings_store.LoadSettings();
     color_convention = ParseProfitColorConvention(
-        settings[SETTING_KEY_COLOR_CONVENTION] as String?);
-    theme_mode =
-        ParseAppThemeMode(settings[SETTING_KEY_THEME_MODE] as String?);
+      settings[SETTING_KEY_COLOR_CONVENTION] as String?,
+    );
+    theme_mode = ParseAppThemeMode(settings[SETTING_KEY_THEME_MODE] as String?);
     dividend_tracking_enabled =
         (settings[SETTING_KEY_DIVIDEND_TRACKING] as bool?) ?? false;
 
@@ -177,12 +178,10 @@ class DashboardController extends ChangeNotifier {
     await repository.StartBackgroundQuotePolling();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
-
   }
 
   /// Google 同步是否已登入。
-  bool get is_drive_signed_in =>
-      repository.drive_sync_service.is_signed_in;
+  bool get is_drive_signed_in => repository.drive_sync_service.is_signed_in;
 
   /// Google 帳號 email。
   String? get drive_account_email =>
@@ -218,16 +217,17 @@ class DashboardController extends ChangeNotifier {
     is_drive_syncing = true;
     notifyListeners();
     try {
-      final Map<String, dynamic> settings =
-          await settings_store.LoadSettings();
-      final DriveSyncResult? result =
-          await repository.drive_sync_service.SyncNow(settings);
+      final Map<String, dynamic> settings = await settings_store.LoadSettings();
+      final DriveSyncResult? result = await repository.drive_sync_service
+          .SyncNow(settings);
       if (result == null) {
         return false;
       }
       last_drive_sync_at = result.synced_at;
-      await settings_store.SaveSetting(SETTING_KEY_LAST_DRIVE_SYNC,
-          result.synced_at.millisecondsSinceEpoch);
+      await settings_store.SaveSetting(
+        SETTING_KEY_LAST_DRIVE_SYNC,
+        result.synced_at.millisecondsSinceEpoch,
+      );
       if (result.pulled_transactions > 0) {
         // 有從雲端合併進新資料 → 全面刷新
         await ReloadHoldings();
@@ -252,7 +252,9 @@ class DashboardController extends ChangeNotifier {
         ? await repository.GetDividendIncomeBySymbol()
         : <String, double>{};
     portfolio_xirr = await repository.CalculatePortfolioXirr(
-        total_market_value, dividend_income_by_symbol);
+      total_market_value,
+      dividend_income_by_symbol,
+    );
     notifyListeners();
   }
 
@@ -291,15 +293,41 @@ class DashboardController extends ChangeNotifier {
    *
    *  @return  ImportSummary - 供 UI 顯示新增/重複/跳過統計
    */
-  Future<ImportSummary> ImportCsvContent(String csv_content) async {
-    final ImportSummary summary =
-        await repository.ImportTransactionsFromCsv(csv_content);
+  Future<ImportSummary> ImportCsvContent(
+    String csv_content, {
+    CsvColumnMapping? column_mapping,
+  }) async {
+    final ImportSummary summary = await repository.ImportTransactionsFromCsv(
+      csv_content,
+      column_mapping: column_mapping,
+    );
     await ReloadHoldings();
     // 匯入後立即抓一次新持倉的報價，並重建資產曲線與股息統計
     await repository.quote_scheduler.PollQuotesNow();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
     return summary;
+  }
+
+  /// 讀取 CSV 標題列，供匯入前欄位對應使用。
+  List<String> GetCsvHeaders(String csv_content) {
+    return repository.csv_importer.GetCsvHeaders(csv_content);
+  }
+
+  /// 自動判斷常見券商 CSV 的欄位名稱。
+  CsvColumnMapping SuggestCsvColumnMapping(List<String> headers) {
+    return repository.csv_importer.SuggestColumnMapping(headers);
+  }
+
+  /// 只解析不寫入，供確認畫面顯示預覽與錯誤列。
+  CsvParseResult PreviewCsvContent(
+    String csv_content,
+    CsvColumnMapping column_mapping,
+  ) {
+    return repository.csv_importer.ParseCsvTransactions(
+      csv_content,
+      column_mapping: column_mapping,
+    );
   }
 
   /// 手動立即更新報價。
@@ -332,10 +360,16 @@ class DashboardController extends ChangeNotifier {
   }
 
   /// 加入自選追蹤並立即抓報價；回傳 false 表示已在清單中。
-  Future<bool> AddToWatchlist(String symbol, String name,
-      {String group_name = '自選'}) async {
-    final bool added = await repository.AddToWatchlist(symbol, name,
-        group_name: group_name);
+  Future<bool> AddToWatchlist(
+    String symbol,
+    String name, {
+    String group_name = '自選',
+  }) async {
+    final bool added = await repository.AddToWatchlist(
+      symbol,
+      name,
+      group_name: group_name,
+    );
     if (added) {
       await ReloadWatchlist();
       await repository.quote_scheduler.PollQuotesNow();
@@ -396,28 +430,36 @@ class DashboardController extends ChangeNotifier {
    *  @return  合併統計；格式不符會拋出 FormatException 由 UI 顯示
    */
   Future<BackupRestoreSummary> ImportBackupJson(String backup_json) async {
-    final BackupRestoreSummary summary =
-        await repository.backup_service.RestoreFromBackupJson(backup_json);
+    final BackupRestoreSummary summary = await repository.backup_service
+        .RestoreFromBackupJson(backup_json);
 
     // 套用備份內的設定（存在才套用）
     final Map<String, dynamic> settings = summary.settings;
     if (settings.containsKey(SETTING_KEY_COLOR_CONVENTION)) {
       color_convention = ParseProfitColorConvention(
-          settings[SETTING_KEY_COLOR_CONVENTION] as String?);
-      await settings_store.SaveSetting(SETTING_KEY_COLOR_CONVENTION,
-          settings[SETTING_KEY_COLOR_CONVENTION]);
+        settings[SETTING_KEY_COLOR_CONVENTION] as String?,
+      );
+      await settings_store.SaveSetting(
+        SETTING_KEY_COLOR_CONVENTION,
+        settings[SETTING_KEY_COLOR_CONVENTION],
+      );
     }
     if (settings.containsKey(SETTING_KEY_THEME_MODE)) {
-      theme_mode =
-          ParseAppThemeMode(settings[SETTING_KEY_THEME_MODE] as String?);
+      theme_mode = ParseAppThemeMode(
+        settings[SETTING_KEY_THEME_MODE] as String?,
+      );
       await settings_store.SaveSetting(
-          SETTING_KEY_THEME_MODE, settings[SETTING_KEY_THEME_MODE]);
+        SETTING_KEY_THEME_MODE,
+        settings[SETTING_KEY_THEME_MODE],
+      );
     }
     if (settings.containsKey(SETTING_KEY_DIVIDEND_TRACKING)) {
       dividend_tracking_enabled =
           (settings[SETTING_KEY_DIVIDEND_TRACKING] as bool?) ?? false;
-      await settings_store.SaveSetting(SETTING_KEY_DIVIDEND_TRACKING,
-          settings[SETTING_KEY_DIVIDEND_TRACKING]);
+      await settings_store.SaveSetting(
+        SETTING_KEY_DIVIDEND_TRACKING,
+        settings[SETTING_KEY_DIVIDEND_TRACKING],
+      );
     }
 
     await ReloadHoldings();
@@ -433,7 +475,9 @@ class DashboardController extends ChangeNotifier {
     theme_mode = mode;
     notifyListeners();
     await settings_store.SaveSetting(
-        SETTING_KEY_THEME_MODE, FormatAppThemeMode(mode));
+      SETTING_KEY_THEME_MODE,
+      FormatAppThemeMode(mode),
+    );
   }
 
   /// 刪除單筆交易並刷新持倉、曲線與股息統計。
@@ -452,8 +496,10 @@ class DashboardController extends ChangeNotifier {
   /// 查單一代號現價（表單預帶價格用），失敗回傳 null。
   Future<double?> FetchCurrentPriceForSymbol(String symbol) async {
     final StockQuote? quote = await repository.FetchSingleQuote(symbol);
-    final (double?, String) resolved =
-        ResolveDisplayPrice(quote, current_session);
+    final (double?, String) resolved = ResolveDisplayPrice(
+      quote,
+      current_session,
+    );
     return resolved.$1 ?? quote?.previous_close;
   }
 
@@ -482,7 +528,9 @@ class DashboardController extends ChangeNotifier {
       notifyListeners();
       try {
         benchmark_closes[index_symbol] = await repository.GetBenchmarkCloses(
-            index_symbol, history.first.date);
+          index_symbol,
+          history.first.date,
+        );
       } finally {
         is_benchmark_loading = false;
       }
@@ -496,8 +544,9 @@ class DashboardController extends ChangeNotifier {
       return history;
     }
     final int from_date = ResolveRangeStartDate(curve_range, DateTime.now());
-    final int start_index =
-        history.indexWhere((PortfolioSnapshot s) => s.date >= from_date);
+    final int start_index = history.indexWhere(
+      (PortfolioSnapshot s) => s.date >= from_date,
+    );
     if (start_index <= 0) {
       return history;
     }
@@ -515,10 +564,23 @@ class DashboardController extends ChangeNotifier {
     return series.isEmpty ? 0 : series.last;
   }
 
+  /// 依目前可見時間範圍與持倉市值產生風險摘要。
+  PortfolioRiskMetrics get portfolio_risk_metrics {
+    final Map<String, double> market_values = <String, double>{
+      for (final HoldingDisplayRow row in BuildHoldingDisplayRows())
+        if (!row.position.is_closed) row.position.symbol: row.market_value,
+    };
+    return repository.calculator.CalculatePortfolioRiskMetrics(
+      GetVisibleHistory(),
+      market_values,
+    );
+  }
+
   /// 組合在目前範圍的每日累計報酬率 %（比較模式的曲線資料）。
   List<double> BuildPortfolioReturnPercentSeries() {
-    return repository.calculator
-        .CalculateCumulativeReturnPercentSeries(GetVisibleHistory());
+    return repository.calculator.CalculateCumulativeReturnPercentSeries(
+      GetVisibleHistory(),
+    );
   }
 
   /// 指定指數在目前範圍、對齊組合日期的累計報酬率 %。
@@ -527,7 +589,9 @@ class DashboardController extends ChangeNotifier {
         .map((PortfolioSnapshot s) => s.date)
         .toList();
     return PortfolioCalculator.BuildBenchmarkReturnPercentSeries(
-        benchmark_closes[index_symbol] ?? <int, double>{}, dates);
+      benchmark_closes[index_symbol] ?? <int, double>{},
+      dates,
+    );
   }
 
   /// 依時間範圍算出起始日期（yyyyMMdd）。
@@ -554,55 +618,62 @@ class DashboardController extends ChangeNotifier {
 
   /// 切換漲跌配色慣例並持久化。
   Future<void> SwitchProfitColorConvention(
-      ProfitColorConvention convention) async {
+    ProfitColorConvention convention,
+  ) async {
     color_convention = convention;
     notifyListeners();
-    await settings_store.SaveSetting(SETTING_KEY_COLOR_CONVENTION,
-        FormatProfitColorConvention(convention));
+    await settings_store.SaveSetting(
+      SETTING_KEY_COLOR_CONVENTION,
+      FormatProfitColorConvention(convention),
+    );
   }
 
   /// 目前持有（未清倉）的顯示列，依市值由大到小排序。
   List<HoldingDisplayRow> BuildHoldingDisplayRows() {
     final Map<String, StockQuote> quotes =
         repository.quote_scheduler.latest_quotes;
-    final List<HoldingDisplayRow> rows = holdings
-        .where((HoldingPosition p) => !p.is_closed)
-        .map((HoldingPosition position) {
-      final StockQuote? quote = quotes[position.symbol];
-      final (double?, String) price_and_label =
-          ResolveDisplayPrice(quote, current_session);
-      final double? price = price_and_label.$1;
-      final double market_value = price != null
-          ? position.net_quantity * price
-          : position.total_cost_basis;
-      final double unrealized = market_value - position.total_cost_basis;
-      final double percent = position.total_cost_basis > 0
-          ? unrealized / position.total_cost_basis * 100
-          : 0;
-      // 今日損益以「盤中價 vs 昨收」計算（延長時段的變動另由價格來源標示呈現）
-      double? day_pnl;
-      double? day_change_percent;
-      if (quote?.regular_price != null && quote?.previous_close != null) {
-        final double change = quote!.regular_price! - quote.previous_close!;
-        day_pnl = change * position.net_quantity;
-        day_change_percent = quote.previous_close! > 0
-            ? change / quote.previous_close! * 100
-            : null;
-      }
-      return HoldingDisplayRow(
-        position: position,
-        current_price: price,
-        price_source_label: price_and_label.$2,
-        market_value: market_value,
-        unrealized_pnl: unrealized,
-        unrealized_pnl_percent: percent,
-        day_pnl: day_pnl,
-        day_change_percent: day_change_percent,
-        dividend_income: dividend_income_by_symbol[position.symbol] ?? 0,
-      );
-    }).toList()
-      ..sort((HoldingDisplayRow a, HoldingDisplayRow b) =>
-          b.market_value.compareTo(a.market_value));
+    final List<HoldingDisplayRow> rows =
+        holdings.where((HoldingPosition p) => !p.is_closed).map((
+          HoldingPosition position,
+        ) {
+          final StockQuote? quote = quotes[position.symbol];
+          final (double?, String) price_and_label = ResolveDisplayPrice(
+            quote,
+            current_session,
+          );
+          final double? price = price_and_label.$1;
+          final double market_value = price != null
+              ? position.net_quantity * price
+              : position.total_cost_basis;
+          final double unrealized = market_value - position.total_cost_basis;
+          final double percent = position.total_cost_basis > 0
+              ? unrealized / position.total_cost_basis * 100
+              : 0;
+          // 今日損益以「盤中價 vs 昨收」計算（延長時段的變動另由價格來源標示呈現）
+          double? day_pnl;
+          double? day_change_percent;
+          if (quote?.regular_price != null && quote?.previous_close != null) {
+            final double change = quote!.regular_price! - quote.previous_close!;
+            day_pnl = change * position.net_quantity;
+            day_change_percent = quote.previous_close! > 0
+                ? change / quote.previous_close! * 100
+                : null;
+          }
+          return HoldingDisplayRow(
+            position: position,
+            current_price: price,
+            price_source_label: price_and_label.$2,
+            market_value: market_value,
+            unrealized_pnl: unrealized,
+            unrealized_pnl_percent: percent,
+            day_pnl: day_pnl,
+            day_change_percent: day_change_percent,
+            dividend_income: dividend_income_by_symbol[position.symbol] ?? 0,
+          );
+        }).toList()..sort(
+          (HoldingDisplayRow a, HoldingDisplayRow b) =>
+              b.market_value.compareTo(a.market_value),
+        );
     return rows;
   }
 
@@ -612,8 +683,10 @@ class DashboardController extends ChangeNotifier {
   }
 
   /// 總市值（無報價的個股以成本計）。
-  double get total_market_value => BuildHoldingDisplayRows()
-      .fold(0.0, (double sum, HoldingDisplayRow r) => sum + r.market_value);
+  double get total_market_value => BuildHoldingDisplayRows().fold(
+    0.0,
+    (double sum, HoldingDisplayRow r) => sum + r.market_value,
+  );
 
   /// 總投入成本（僅未清倉部位）。
   double get total_cost_basis => holdings
@@ -629,11 +702,15 @@ class DashboardController extends ChangeNotifier {
 
   /// 已實現損益總額（含已清倉代號）。
   double get total_realized_pnl => holdings.fold(
-      0.0, (double sum, HoldingPosition p) => sum + p.realized_pnl);
+    0.0,
+    (double sum, HoldingPosition p) => sum + p.realized_pnl,
+  );
 
   /// 今日損益總額（有報價的持倉加總）。
   double get total_day_pnl => BuildHoldingDisplayRows().fold(
-      0.0, (double sum, HoldingDisplayRow r) => sum + (r.day_pnl ?? 0));
+    0.0,
+    (double sum, HoldingDisplayRow r) => sum + (r.day_pnl ?? 0),
+  );
 
   /// 今日損益 %（相對昨日總市值）。
   double get total_day_change_percent {
@@ -643,8 +720,10 @@ class DashboardController extends ChangeNotifier {
   }
 
   /// 累計股息收入總額。
-  double get total_dividend_income => dividend_income_by_symbol.values
-      .fold(0.0, (double sum, double v) => sum + v);
+  double get total_dividend_income => dividend_income_by_symbol.values.fold(
+    0.0,
+    (double sum, double v) => sum + v,
+  );
 
   /*
    *  @fn      static (double?, String) ResolveDisplayPrice(StockQuote? quote, MarketSession session)
@@ -659,7 +738,9 @@ class DashboardController extends ChangeNotifier {
    *  @note    盤前優先顯示盤前價、盤後優先顯示盤後價，缺值時退回盤中價。
    */
   static (double?, String) ResolveDisplayPrice(
-      StockQuote? quote, MarketSession session) {
+    StockQuote? quote,
+    MarketSession session,
+  ) {
     if (quote == null) {
       return (null, '均價');
     }

@@ -9,6 +9,7 @@ import '../../models/holding_position.dart';
 import '../../services/csv_transaction_importer.dart';
 import '../dashboard_controller.dart';
 import '../widgets/holding_list_view.dart';
+import '../widgets/csv_import_preview_dialog.dart';
 import '../widgets/section_card.dart';
 
 /*
@@ -65,10 +66,13 @@ class HoldingsPage extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(vertical: 6),
                           child: Row(
                             children: <Widget>[
-                              Text(position.symbol,
-                                  style: const TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700)),
+                              Text(
+                                position.symbol,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                               const Spacer(),
                               Text(
                                 '已實現 ${position.realized_pnl >= 0 ? '+' : ''}'
@@ -78,7 +82,8 @@ class HoldingsPage extends StatelessWidget {
                                   fontWeight: FontWeight.w600,
                                   color: controller.profit_colors
                                       .ResolveColorForValue(
-                                          position.realized_pnl),
+                                        position.realized_pnl,
+                                      ),
                                 ),
                               ),
                             ],
@@ -102,7 +107,9 @@ class HoldingsPage extends StatelessWidget {
    *  @brief   ( 開檔案選取器匯入 CSV，結果以 SnackBar 呈現；供多個分頁共用 )
    */
   static Future<void> PickAndImportCsvFile(
-      BuildContext context, DashboardController controller) async {
+    BuildContext context,
+    DashboardController controller,
+  ) async {
     final ScaffoldMessengerState messenger = ScaffoldMessenger.of(context);
     try {
       final XFile? file = await openFile(
@@ -113,23 +120,51 @@ class HoldingsPage extends StatelessWidget {
       if (file == null) {
         return; // 使用者取消
       }
-      final String csv_content =
-          utf8.decode(await file.readAsBytes(), allowMalformed: true);
+      final String csv_content = utf8.decode(
+        await file.readAsBytes(),
+        allowMalformed: true,
+      );
 
-      final ImportSummary summary =
-          await controller.ImportCsvContent(csv_content);
+      if (!context.mounted) {
+        return;
+      }
+      final CsvColumnMapping? column_mapping =
+          await showDialog<CsvColumnMapping>(
+            context: context,
+            builder: (BuildContext context) => CsvImportPreviewDialog(
+              csv_content: csv_content,
+              controller: controller,
+            ),
+          );
+      if (column_mapping == null) {
+        return;
+      }
+
+      final ImportSummary summary = await controller.ImportCsvContent(
+        csv_content,
+        column_mapping: column_mapping,
+      );
+      if (!context.mounted) {
+        return;
+      }
       final String skipped_note = summary.skipped_rows.isNotEmpty
           ? '，跳過 ${summary.skipped_rows.length} 列（格式錯誤）'
           : '';
-      messenger.showSnackBar(SnackBar(
-        content: Text('匯入完成：新增 ${summary.inserted_count} 筆、'
-            '重複略過 ${summary.duplicate_count} 筆$skipped_note'),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '匯入完成：新增 ${summary.inserted_count} 筆、'
+            '重複略過 ${summary.duplicate_count} 筆$skipped_note',
+          ),
+        ),
+      );
     } catch (error) {
-      messenger.showSnackBar(SnackBar(
-        content: Text('匯入失敗：$error'),
-        backgroundColor: const Color(0xFFDC2626),
-      ));
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('匯入失敗：$error'),
+          backgroundColor: const Color(0xFFDC2626),
+        ),
+      );
     }
   }
 }

@@ -56,26 +56,24 @@ class PortfolioRepository {
   late final GoogleDriveSyncService drive_sync_service;
   late final QuotePollingScheduler quote_scheduler;
 
-  PortfolioRepository({
-    required this.database,
-    http.Client? http_client,
-  })  : csv_importer = CsvTransactionImporter(),
-        calculator = PortfolioCalculator(),
-        session_resolver = MarketSessionResolver(),
-        quote_service = YahooQuoteService(http_client: http_client),
-        symbol_search_service =
-            StockSymbolSearchService(http_client: http_client),
-        dividend_service = DividendService(
-          dividend_dao: database.dividendDao,
-          http_client: http_client,
-        ),
-        historical_price_service = HistoricalPriceService(
-          historical_price_dao: database.historicalPriceDao,
-          http_client: http_client,
-        ) {
+  PortfolioRepository({required this.database, http.Client? http_client})
+    : csv_importer = CsvTransactionImporter(),
+      calculator = PortfolioCalculator(),
+      session_resolver = MarketSessionResolver(),
+      quote_service = YahooQuoteService(http_client: http_client),
+      symbol_search_service = StockSymbolSearchService(
+        http_client: http_client,
+      ),
+      dividend_service = DividendService(
+        dividend_dao: database.dividendDao,
+        http_client: http_client,
+      ),
+      historical_price_service = HistoricalPriceService(
+        historical_price_dao: database.historicalPriceDao,
+        http_client: http_client,
+      ) {
     backup_service = BackupService(database: database);
-    drive_sync_service =
-        GoogleDriveSyncService(backup_service: backup_service);
+    drive_sync_service = GoogleDriveSyncService(backup_service: backup_service);
     quote_scheduler = QuotePollingScheduler(
       quote_service: quote_service,
       quote_cache_dao: database.quoteCacheDao,
@@ -87,15 +85,21 @@ class PortfolioRepository {
   String get cost_method_name => PortfolioCalculator.COST_METHOD_NAME;
 
   /// 匯入 CSV 全文並回傳統計摘要（支援重複匯入去重）。
-  Future<ImportSummary> ImportTransactionsFromCsv(String csv_content) {
+  Future<ImportSummary> ImportTransactionsFromCsv(
+    String csv_content, {
+    CsvColumnMapping? column_mapping,
+  }) {
     return csv_importer.ImportCsvIntoDatabase(
-        csv_content, database.transactionDao);
+      csv_content,
+      database.transactionDao,
+      column_mapping: column_mapping,
+    );
   }
 
   /// 取得全部持倉（依加權平均法計算，含已清倉代號）。
   Future<List<HoldingPosition>> GetHoldingPositions() async {
-    final List<StockTransaction> transactions =
-        await database.transactionDao.GetAllTransactions();
+    final List<StockTransaction> transactions = await database.transactionDao
+        .GetAllTransactions();
     return calculator.CalculateHoldingPositions(transactions);
   }
 
@@ -107,8 +111,8 @@ class PortfolioRepository {
   /// 取得需要追蹤報價的代號清單：持有中的個股 ∪ 自選追蹤清單。
   Future<List<String>> GetTrackedSymbols() async {
     final List<HoldingPosition> positions = await GetHoldingPositions();
-    final List<WatchlistSymbol> watchlist =
-        await database.watchlistDao.GetAllSymbols();
+    final List<WatchlistSymbol> watchlist = await database.watchlistDao
+        .GetAllSymbols();
     final Set<String> symbols = <String>{
       ...positions
           .where((HoldingPosition p) => !p.is_closed)
@@ -124,14 +128,22 @@ class PortfolioRepository {
   }
 
   /// 加入自選追蹤；回傳 true 表示實際新增（false = 已在清單中）。
-  Future<bool> AddToWatchlist(String symbol, String name,
-      {String group_name = '自選'}) async {
+  Future<bool> AddToWatchlist(
+    String symbol,
+    String name, {
+    String group_name = '自選',
+  }) async {
     final bool added = await database.watchlistDao.AddSymbol(
-        symbol, name, DateTime.now().millisecondsSinceEpoch,
-        group_name: group_name);
+      symbol,
+      name,
+      DateTime.now().millisecondsSinceEpoch,
+      group_name: group_name,
+    );
     if (added) {
-      await database.tombstoneDao
-          .RemoveTombstone(TombstoneDao.KIND_WATCHLIST, symbol);
+      await database.tombstoneDao.RemoveTombstone(
+        TombstoneDao.KIND_WATCHLIST,
+        symbol,
+      );
     }
     return added;
   }
@@ -144,16 +156,23 @@ class PortfolioRepository {
   /// 移除自選追蹤並留下同步墓碑。
   Future<void> RemoveFromWatchlist(String symbol) async {
     await database.watchlistDao.RemoveSymbol(symbol);
-    await database.tombstoneDao
-        .AddTombstone(TombstoneDao.KIND_WATCHLIST, symbol);
+    await database.tombstoneDao.AddTombstone(
+      TombstoneDao.KIND_WATCHLIST,
+      symbol,
+    );
   }
 
   /// 抓取個股詳情頁的 K 線資料（日/週/月＋時間範圍）；失敗回傳 null。
   Future<List<OhlcvCandle>?> FetchOhlcvCandles(
-      String symbol, CandleInterval interval,
-      {CandleRange? range}) {
-    return historical_price_service.FetchOhlcvCandles(symbol, interval,
-        range: range);
+    String symbol,
+    CandleInterval interval, {
+    CandleRange? range,
+  }) {
+    return historical_price_service.FetchOhlcvCandles(
+      symbol,
+      interval,
+      range: range,
+    );
   }
 
   /*
@@ -166,8 +185,8 @@ class PortfolioRepository {
    *  @note    歷史股價同步失敗時使用既有快取，曲線仍可畫出（可能缺最新幾天）。
    */
   Future<List<PortfolioSnapshot>> GetPortfolioHistory() async {
-    final List<StockTransaction> transactions =
-        await database.transactionDao.GetAllTransactions();
+    final List<StockTransaction> transactions = await database.transactionDao
+        .GetAllTransactions();
     if (transactions.isEmpty) {
       return <PortfolioSnapshot>[];
     }
@@ -184,15 +203,21 @@ class PortfolioRepository {
     // 增量同步歷史股價（失敗靜默，用既有快取）
     for (final MapEntry<String, int> entry in earliest_by_symbol.entries) {
       await historical_price_service.SyncHistoricalCloses(
-          entry.key, entry.value);
+        entry.key,
+        entry.value,
+      );
     }
 
-    final Map<String, Map<int, double>> closes =
-        await database.historicalPriceDao.GetAllHistoricalCloses();
+    final Map<String, Map<int, double>> closes = await database
+        .historicalPriceDao
+        .GetAllHistoricalCloses();
     final DateTime now = DateTime.now();
     final int today = now.year * 10000 + now.month * 100 + now.day;
     return calculator.CalculateDailyPortfolioHistory(
-        transactions, closes, today);
+      transactions,
+      closes,
+      today,
+    );
   }
 
   /*
@@ -205,8 +230,9 @@ class PortfolioRepository {
    *  @return  true 表示新增成功；false 表示與既有紀錄重複被忽略
    */
   Future<bool> AddManualTransaction(StockTransaction transaction) async {
-    final bool inserted =
-        await database.transactionDao.InsertIgnoreTransaction(transaction);
+    final bool inserted = await database.transactionDao.InsertIgnoreTransaction(
+      transaction,
+    );
     if (inserted) {
       // 重新加入曾刪除的相同交易 → 撤銷墓碑
       await database.tombstoneDao.RemoveTombstone(
@@ -222,8 +248,9 @@ class PortfolioRepository {
     if (transaction.id == null) {
       return false;
     }
-    final bool deleted = await database.transactionDao
-        .DeleteTransactionById(transaction.id!);
+    final bool deleted = await database.transactionDao.DeleteTransactionById(
+      transaction.id!,
+    );
     if (deleted) {
       await database.tombstoneDao.AddTombstone(
         TombstoneDao.KIND_TRANSACTION,
@@ -261,9 +288,13 @@ class PortfolioRepository {
    *  @return  {yyyyMMdd: 收盤}；同步失敗時回傳既有快取（可能為空）
    */
   Future<Map<int, double>> GetBenchmarkCloses(
-      String index_symbol, int from_date) async {
+    String index_symbol,
+    int from_date,
+  ) async {
     await historical_price_service.SyncHistoricalCloses(
-        index_symbol, from_date);
+      index_symbol,
+      from_date,
+    );
     return database.historicalPriceDao.GetHistoricalCloses(index_symbol);
   }
 
@@ -275,8 +306,8 @@ class PortfolioRepository {
    *  @return  {symbol: 累計股息}；同步失敗時使用既有快取
    */
   Future<Map<String, double>> GetDividendIncomeBySymbol() async {
-    final List<StockTransaction> transactions =
-        await database.transactionDao.GetAllTransactions();
+    final List<StockTransaction> transactions = await database.transactionDao
+        .GetAllTransactions();
     if (transactions.isEmpty) {
       return <String, double>{};
     }
@@ -290,8 +321,8 @@ class PortfolioRepository {
     for (final MapEntry<String, int> entry in earliest_by_symbol.entries) {
       await dividend_service.SyncDividendEvents(entry.key, entry.value);
     }
-    final Map<String, Map<int, double>> events =
-        await database.dividendDao.GetAllDividendEvents();
+    final Map<String, Map<int, double>> events = await database.dividendDao
+        .GetAllDividendEvents();
     return calculator.CalculateDividendIncomeBySymbol(transactions, events);
   }
 
@@ -306,9 +337,11 @@ class PortfolioRepository {
    *  @return  年化報酬率；資料不足無法求解回傳 null
    */
   Future<double?> CalculatePortfolioXirr(
-      double total_market_value, Map<String, double> dividend_income) async {
-    final List<StockTransaction> transactions =
-        await database.transactionDao.GetAllTransactions();
+    double total_market_value,
+    Map<String, double> dividend_income,
+  ) async {
+    final List<StockTransaction> transactions = await database.transactionDao
+        .GetAllTransactions();
     if (transactions.isEmpty) {
       return null;
     }
@@ -320,7 +353,10 @@ class PortfolioRepository {
         .map((StockTransaction t) => t.trade_date)
         .reduce((int a, int b) => a < b ? a : b);
     final DateTime earliest_date = DateTime(
-        earliest ~/ 10000, (earliest ~/ 100) % 100, earliest % 100);
+      earliest ~/ 10000,
+      (earliest ~/ 100) % 100,
+      earliest % 100,
+    );
     if (now.difference(earliest_date).inDays < 30) {
       return null;
     }
@@ -331,14 +367,16 @@ class PortfolioRepository {
           tx.trade_date,
           tx.transaction_type == TransactionType.buy
               ? -tx.purchase_price * tx.quantity
-              : tx.purchase_price * tx.quantity
+              : tx.purchase_price * tx.quantity,
         ),
       // 股息以「今日一次收到」近似（除息日分攤的差異對年化影響極小）
       (
         today,
         total_market_value +
-            dividend_income.values
-                .fold<double>(0.0, (double sum, double v) => sum + v)
+            dividend_income.values.fold<double>(
+              0.0,
+              (double sum, double v) => sum + v,
+            ),
       ),
     ];
     return calculator.CalculateXirr(cashflows);
