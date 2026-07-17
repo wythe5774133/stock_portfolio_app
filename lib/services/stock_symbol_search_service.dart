@@ -35,7 +35,7 @@ class StockSymbolSearchService {
   final http.Client http_client;
 
   StockSymbolSearchService({http.Client? http_client})
-      : http_client = http_client ?? http.Client();
+    : http_client = http_client ?? http.Client();
 
   /*
    *  @fn      Future<List<SymbolSearchResult>> SearchSymbols(String query)
@@ -52,13 +52,16 @@ class StockSymbolSearchService {
       return <SymbolSearchResult>[];
     }
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
-      final Uri uri =
-          BuildYahooUri(host, '/v1/finance/search', <String, String>{
-        'q': trimmed,
-        'quotesCount': '8',
-        'newsCount': '0',
-        'listsCount': '0',
-      });
+      final Uri uri = BuildYahooUri(
+        host,
+        '/v1/finance/search',
+        <String, String>{
+          'q': trimmed,
+          'quotesCount': '8',
+          'newsCount': '0',
+          'listsCount': '0',
+        },
+      );
       try {
         final http.Response response = await http_client
             .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
@@ -70,7 +73,8 @@ class StockSymbolSearchService {
           return <SymbolSearchResult>[];
         }
         return ParseSearchResponseJson(
-            jsonDecode(response.body) as Map<String, dynamic>);
+          jsonDecode(response.body) as Map<String, dynamic>,
+        );
       } on Exception {
         return <SymbolSearchResult>[];
       }
@@ -87,15 +91,31 @@ class StockSymbolSearchService {
    *
    *  @return  最多 8 則新聞；失敗回傳空清單不拋例外
    */
-  Future<List<StockNewsItem>> FetchNewsForSymbol(String symbol) async {
+  Future<List<StockNewsItem>> FetchNewsForSymbol(
+    String symbol, {
+    String? display_name,
+  }) async {
+    final bool is_taiwan_symbol = IsTaiwanSymbol(symbol);
+    final String trimmed_name = display_name?.trim() ?? '';
+    final String news_query =
+        is_taiwan_symbol &&
+            trimmed_name.isNotEmpty &&
+            trimmed_name.toUpperCase() != symbol.toUpperCase()
+        ? trimmed_name
+        : symbol;
     for (final String host in YahooQuoteService.QUERY_HOSTS) {
-      final Uri uri =
-          BuildYahooUri(host, '/v1/finance/search', <String, String>{
-        'q': symbol,
-        'quotesCount': '0',
-        'newsCount': '8',
-        'listsCount': '0',
-      });
+      final Uri uri = BuildYahooUri(
+        host,
+        '/v1/finance/search',
+        <String, String>{
+          'q': news_query,
+          // 台股代號直接查詢會回傳全站熱門新聞；同時取公司名稱對應標的，
+          // 例如 2330.TW 以公司名稱搜尋後會取得美股 ADR 代號 TSM。
+          'quotesCount': is_taiwan_symbol ? '1' : '0',
+          'newsCount': is_taiwan_symbol ? '20' : '8',
+          'listsCount': '0',
+        },
+      );
       try {
         final http.Response response = await http_client
             .get(uri, headers: BuildYahooHeaders(YahooQuoteService.USER_AGENT))
@@ -106,8 +126,27 @@ class StockSymbolSearchService {
         if (response.statusCode != 200) {
           return <StockNewsItem>[];
         }
+        final Map<String, dynamic> body =
+            jsonDecode(response.body) as Map<String, dynamic>;
+        if (!is_taiwan_symbol) {
+          return ParseNewsResponseJson(body);
+        }
+        final Set<String> relevant_symbols = <String>{symbol.toUpperCase()};
+        final List<dynamic>? matched_quotes = body['quotes'] as List<dynamic>?;
+        if (matched_quotes != null && matched_quotes.isNotEmpty) {
+          final dynamic first_quote = matched_quotes.first;
+          if (first_quote is Map<String, dynamic>) {
+            final String? matched_symbol = first_quote['symbol'] as String?;
+            if (matched_symbol != null && matched_symbol.isNotEmpty) {
+              relevant_symbols.add(matched_symbol.toUpperCase());
+            }
+          }
+        }
         return ParseNewsResponseJson(
-            jsonDecode(response.body) as Map<String, dynamic>);
+          body,
+          relevant_symbols: relevant_symbols,
+          relevance_terms: BuildNewsRelevanceTerms(trimmed_name),
+        ).take(8).toList();
       } on Exception {
         return <StockNewsItem>[];
       }
@@ -122,7 +161,11 @@ class StockSymbolSearchService {
    *
    *  @return  新聞清單，缺標題或連結的項目跳過（純函式，供單元測試）
    */
-  static List<StockNewsItem> ParseNewsResponseJson(Map<String, dynamic> json) {
+  static List<StockNewsItem> ParseNewsResponseJson(
+    Map<String, dynamic> json, {
+    Set<String> relevant_symbols = const <String>{},
+    Set<String> relevance_terms = const <String>{},
+  }) {
     final List<dynamic>? news = json['news'] as List<dynamic>?;
     if (news == null) {
       return <StockNewsItem>[];
@@ -137,17 +180,66 @@ class StockSymbolSearchService {
       if (title == null || title.isEmpty || link == null || link.isEmpty) {
         continue;
       }
+      if (relevant_symbols.isNotEmpty || relevance_terms.isNotEmpty) {
+        final List<dynamic>? raw_related_tickers =
+            raw['relatedTickers'] as List<dynamic>?;
+        final Set<String> related_tickers = (raw_related_tickers ?? <dynamic>[])
+            .whereType<String>()
+            .map((String ticker) => ticker.toUpperCase())
+            .toSet();
+        final bool ticker_matches = related_tickers.any(
+          (String ticker) => relevant_symbols.contains(ticker),
+        );
+        final String normalized_title = title.toLowerCase();
+        final bool title_matches = relevance_terms.any(
+          (String term) => normalized_title.contains(term),
+        );
+        if (!ticker_matches && !title_matches) {
+          continue;
+        }
+      }
       final num? publish_time = raw['providerPublishTime'] as num?;
-      items.add(StockNewsItem(
-        title: title,
-        publisher: (raw['publisher'] as String?) ?? '',
-        link: link,
-        published_at: publish_time != null
-            ? DateTime.fromMillisecondsSinceEpoch(publish_time.toInt() * 1000)
-            : null,
-      ));
+      items.add(
+        StockNewsItem(
+          title: title,
+          publisher: (raw['publisher'] as String?) ?? '',
+          link: link,
+          published_at: publish_time != null
+              ? DateTime.fromMillisecondsSinceEpoch(publish_time.toInt() * 1000)
+              : null,
+        ),
+      );
     }
     return items;
+  }
+
+  /// 判斷是否為 Yahoo 台灣上市／上櫃代號。
+  static bool IsTaiwanSymbol(String symbol) {
+    final String normalized = symbol.trim().toUpperCase();
+    return normalized.endsWith('.TW') || normalized.endsWith('.TWO');
+  }
+
+  /// 從公司名稱取出可用於新聞標題比對的關鍵詞，排除過度通用的公司字樣。
+  static Set<String> BuildNewsRelevanceTerms(String display_name) {
+    const Set<String> ignored_terms = <String>{
+      'taiwan',
+      'company',
+      'corporation',
+      'limited',
+      'holdings',
+      'holding',
+      'group',
+      'inc',
+      'ltd',
+      'co',
+    };
+    return display_name
+        .toLowerCase()
+        .split(RegExp(r'[^\p{L}\p{N}]+', unicode: true))
+        .where(
+          (String term) => term.length >= 3 && !ignored_terms.contains(term),
+        )
+        .toSet();
   }
 
   /*
@@ -160,7 +252,8 @@ class StockSymbolSearchService {
    *  @return  過濾排序後的結果清單（純函式，供單元測試）
    */
   static List<SymbolSearchResult> ParseSearchResponseJson(
-      Map<String, dynamic> json) {
+    Map<String, dynamic> json,
+  ) {
     final List<dynamic>? quotes = json['quotes'] as List<dynamic>?;
     if (quotes == null) {
       return <SymbolSearchResult>[];
@@ -177,14 +270,17 @@ class StockSymbolSearchService {
           !TRADABLE_QUOTE_TYPES.contains(quote_type)) {
         continue;
       }
-      results.add(SymbolSearchResult(
-        symbol: symbol,
-        name: (raw['longname'] as String?) ??
-            (raw['shortname'] as String?) ??
-            symbol,
-        exchange: (raw['exchDisp'] as String?) ?? '',
-        quote_type: quote_type,
-      ));
+      results.add(
+        SymbolSearchResult(
+          symbol: symbol,
+          name:
+              (raw['longname'] as String?) ??
+              (raw['shortname'] as String?) ??
+              symbol,
+          exchange: (raw['exchDisp'] as String?) ?? '',
+          quote_type: quote_type,
+        ),
+      );
     }
     return results;
   }

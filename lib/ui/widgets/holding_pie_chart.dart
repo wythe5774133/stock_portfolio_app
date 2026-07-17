@@ -3,8 +3,8 @@
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
+import '../money_format.dart';
 import '../theme/app_theme.dart';
 
 /// 圓餅圖單一切片的資料。
@@ -40,8 +40,13 @@ class HoldingPieChart extends StatelessWidget {
   ];
 
   final List<PieSliceEntry> entries;
+  final String currency; // 切片數值的顯示幣別（已換算），供金額格式化
 
-  const HoldingPieChart({super.key, required this.entries});
+  const HoldingPieChart({
+    super.key,
+    required this.entries,
+    required this.currency,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -134,8 +139,11 @@ class HoldingPieChart extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            NumberFormat.compactCurrency(symbol: r'$')
-                                .format(positive_entries[i].value),
+                            FormatMoney(
+                              positive_entries[i].value,
+                              currency,
+                              compact: true,
+                            ),
                             style: const TextStyle(
                                 fontSize: 12, color: Colors.grey),
                           ),
@@ -156,7 +164,6 @@ class HoldingPieChart extends StatelessWidget {
       BuildContext context, List<PieSliceEntry> positive_entries,
       double total) {
     final AppColors colors = AppColors.Of(context);
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
     final double max_value = positive_entries.first.value; // 已依大小排序
 
     return Column(
@@ -226,7 +233,7 @@ class HoldingPieChart extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      money.format(positive_entries[i].value),
+                      FormatMoney(positive_entries[i].value, currency),
                       maxLines: 1,
                       style: TextStyle(
                           fontSize: 12, color: colors.text_secondary),

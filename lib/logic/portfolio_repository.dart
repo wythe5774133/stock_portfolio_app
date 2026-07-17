@@ -22,6 +22,7 @@ import '../services/market_session_resolver.dart';
 import '../services/quote_polling_scheduler.dart';
 import '../services/stock_symbol_search_service.dart';
 import '../services/yahoo_quote_service.dart';
+import 'market_registry.dart';
 import 'portfolio_calculator.dart';
 
 /*
@@ -55,6 +56,10 @@ class PortfolioRepository {
   late final BackupService backup_service;
   late final GoogleDriveSyncService drive_sync_service;
   late final QuotePollingScheduler quote_scheduler;
+
+  /// 目前顯示幣別（'USD' | 'TWD'）。由 controller 依使用者設定注入，
+  /// 影響追蹤代號集合（是否加入匯率）與資產曲線的換算基準。
+  String display_currency = 'USD';
 
   PortfolioRepository({required this.database, http.Client? http_client})
     : csv_importer = CsvTransactionImporter(),
@@ -109,6 +114,8 @@ class PortfolioRepository {
   }
 
   /// 取得需要追蹤報價的代號清單：持有中的個股 ∪ 自選追蹤清單。
+  /// 當任一代號屬台股、或顯示幣別為 TWD 時，額外加入匯率代號 'TWD=X'，
+  /// 讓匯率跟隨相同的報價輪詢與快取管線更新。
   Future<List<String>> GetTrackedSymbols() async {
     final List<HoldingPosition> positions = await GetHoldingPositions();
     final List<WatchlistSymbol> watchlist = await database.watchlistDao
@@ -119,6 +126,12 @@ class PortfolioRepository {
           .map((HoldingPosition p) => p.symbol),
       ...watchlist.map((WatchlistSymbol w) => w.symbol),
     };
+    final bool has_tw_symbol = symbols.any(
+      (String s) => ResolveMarketForSymbol(s).market_id == 'tw',
+    );
+    if (has_tw_symbol || display_currency == 'TWD') {
+      symbols.add(USD_TWD_FX_SYMBOL);
+    }
     return symbols.toList();
   }
 
@@ -183,6 +196,8 @@ class PortfolioRepository {
    *  @return  由舊到新的每日快照；無交易時回傳空清單
    *
    *  @note    歷史股價同步失敗時使用既有快取，曲線仍可畫出（可能缺最新幾天）。
+   *           組合含台股代號或顯示幣別為 TWD 時，額外同步 'TWD=X' 歷史匯率，
+   *           逐日以往前遞補換算到顯示幣別。
    */
   Future<List<PortfolioSnapshot>> GetPortfolioHistory() async {
     final List<StockTransaction> transactions = await database.transactionDao
@@ -208,6 +223,26 @@ class PortfolioRepository {
       );
     }
 
+    // 需要換匯時（含台股代號或顯示 TWD），同步歷史匯率並取出 {yyyyMMdd: 匯率}
+    Map<int, double> usd_twd_by_date = const <int, double>{};
+    final bool needs_fx =
+        display_currency == 'TWD' ||
+        earliest_by_symbol.keys.any(
+          (String s) => ResolveMarketForSymbol(s).market_id == 'tw',
+        );
+    if (needs_fx) {
+      final int earliest_trade_date = earliest_by_symbol.values.reduce(
+        (int a, int b) => a < b ? a : b,
+      );
+      await historical_price_service.SyncHistoricalCloses(
+        USD_TWD_FX_SYMBOL,
+        earliest_trade_date,
+      );
+      usd_twd_by_date = await database.historicalPriceDao.GetHistoricalCloses(
+        USD_TWD_FX_SYMBOL,
+      );
+    }
+
     final Map<String, Map<int, double>> closes = await database
         .historicalPriceDao
         .GetAllHistoricalCloses();
@@ -217,6 +252,8 @@ class PortfolioRepository {
       transactions,
       closes,
       today,
+      display_currency: display_currency,
+      usd_twd_by_date: usd_twd_by_date,
     );
   }
 
@@ -266,8 +303,14 @@ class PortfolioRepository {
   }
 
   /// 抓取個股相關新聞（詳情頁用）；失敗回傳空清單。
-  Future<List<StockNewsItem>> FetchNewsForSymbol(String symbol) {
-    return symbol_search_service.FetchNewsForSymbol(symbol);
+  Future<List<StockNewsItem>> FetchNewsForSymbol(
+    String symbol, {
+    String? display_name,
+  }) {
+    return symbol_search_service.FetchNewsForSymbol(
+      symbol,
+      display_name: display_name,
+    );
   }
 
   /// 查詢單一代號的即時報價（手動記帳時預帶現價用）；失敗回傳 null。
@@ -331,15 +374,20 @@ class PortfolioRepository {
    *
    *  @brief   ( 計算整體組合的資金加權年化報酬率 XIRR )
    *
-   *  @param   total_market_value - 今日總市值
-   *  @param   dividend_income - 各代號累計股息（視為今日收到的正現金流）
+   *  @param   total_market_value - 今日總市值（已換算為顯示幣別）
+   *  @param   dividend_income - 各代號累計股息（原生幣別，視為今日收到的正現金流）
+   *  @param   usd_twd_rate - 現時 1 美元兌台幣匯率；顯示 TWD 時期末市值與股息換算用
    *
    *  @return  年化報酬率；資料不足無法求解回傳 null
+   *
+   *  @note    逐筆交易現金流以「交易日匯率（往前遞補）」換算到顯示幣別，
+   *           期末市值與股息以現時匯率換算，全美股 USD 顯示時不觸發換算。
    */
   Future<double?> CalculatePortfolioXirr(
     double total_market_value,
-    Map<String, double> dividend_income,
-  ) async {
+    Map<String, double> dividend_income, {
+    double? usd_twd_rate,
+  }) async {
     final List<StockTransaction> transactions = await database.transactionDao
         .GetAllTransactions();
     if (transactions.isEmpty) {
@@ -361,23 +409,53 @@ class PortfolioRepository {
       return null;
     }
 
+    // 交易日匯率史（往前遞補用）；顯示 USD 且無台股時為空，不觸發換算
+    final double effective_rate = usd_twd_rate ?? 0.0;
+    Map<int, double> usd_twd_by_date = const <int, double>{};
+    final bool needs_fx =
+        display_currency == 'TWD' ||
+        transactions.any(
+          (StockTransaction t) =>
+              ResolveMarketForSymbol(t.symbol).market_id == 'tw',
+        );
+    if (needs_fx) {
+      usd_twd_by_date = await database.historicalPriceDao.GetHistoricalCloses(
+        USD_TWD_FX_SYMBOL,
+      );
+    }
+    final List<int> sorted_rate_dates = usd_twd_by_date.keys.toList()..sort();
+
+    // 各代號累計股息以現時匯率換算到顯示幣別後加總
+    double converted_dividends = 0.0;
+    for (final MapEntry<String, double> entry in dividend_income.entries) {
+      converted_dividends += PortfolioCalculator.ConvertCurrencyValue(
+        entry.value,
+        ResolveMarketForSymbol(entry.key).currency,
+        display_currency,
+        effective_rate,
+      );
+    }
+
     final List<(int, double)> cashflows = <(int, double)>[
       for (final StockTransaction tx in transactions)
         (
           tx.trade_date,
-          tx.transaction_type == TransactionType.buy
-              ? -tx.purchase_price * tx.quantity
-              : tx.purchase_price * tx.quantity,
+          PortfolioCalculator.ConvertCurrencyValue(
+            tx.transaction_type == TransactionType.buy
+                ? -tx.purchase_price * tx.quantity
+                : tx.purchase_price * tx.quantity,
+            ResolveMarketForSymbol(tx.symbol).currency,
+            display_currency,
+            PortfolioCalculator.ResolveForwardFilledRate(
+              sorted_rate_dates,
+              usd_twd_by_date,
+              tx.trade_date,
+            ),
+          ),
         ),
       // 股息以「今日一次收到」近似（除息日分攤的差異對年化影響極小）
-      (
-        today,
-        total_market_value +
-            dividend_income.values.fold<double>(
-              0.0,
-              (double sum, double v) => sum + v,
-            ),
-      ),
+      // total_market_value 已為顯示幣別，股息以現時匯率換算後加入
+      (today, total_market_value + converted_dividends),
     ];
     return calculator.CalculateXirr(cashflows);
   }

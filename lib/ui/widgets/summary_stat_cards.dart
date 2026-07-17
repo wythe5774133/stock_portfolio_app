@@ -2,8 +2,8 @@
 // 所有卡片保留副標列（無副標補空白），確保高度一致不參差。
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
+import '../money_format.dart';
 import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
 
@@ -30,6 +30,7 @@ class SummaryStatCards extends StatelessWidget {
   final double total_dividend_income;
   final double? portfolio_xirr; // null = 資料不足
   final bool show_dividend_card; // 股息追蹤關閉時隱藏股息卡片
+  final String display_currency; // 聚合金額的顯示幣別（display_currency_effective）
   final ProfitColorScheme profit_colors;
 
   const SummaryStatCards({
@@ -44,6 +45,7 @@ class SummaryStatCards extends StatelessWidget {
     required this.total_dividend_income,
     required this.portfolio_xirr,
     required this.show_dividend_card,
+    required this.display_currency,
     required this.profit_colors,
   });
 
@@ -89,7 +91,6 @@ class SummaryStatCards extends StatelessWidget {
     final double card_width = max_width >= 1080
         ? (max_width - (card_count - 1) * 12) / card_count
         : (max_width - 2 * 12) / 3;
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
     final double day_pnl = NormalizeTinyValue(total_day_pnl);
     final double day_percent = NormalizeTinyValue(total_day_change_percent);
     final String day_sign = day_pnl >= 0 ? '+' : '';
@@ -104,8 +105,8 @@ class SummaryStatCards extends StatelessWidget {
           height: 104,
           value_font_size: 21,
           title: '總資產',
-          value: money.format(total_market_value),
-          subtitle: '今日 $day_sign${money.format(day_pnl)}'
+          value: FormatMoney(total_market_value, display_currency),
+          subtitle: '今日 $day_sign${FormatMoney(day_pnl, display_currency)}'
               '（$day_sign${day_percent.toStringAsFixed(2)}%）',
           subtitle_color: profit_colors.ResolveColorForValue(day_pnl),
         ),
@@ -121,7 +122,6 @@ class SummaryStatCards extends StatelessWidget {
 
   /// 手機置頂 hero 卡：大字總資產＋今日損益。
   Widget _BuildHeroCard(AppColors colors) {
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
     final double day_pnl = NormalizeTinyValue(total_day_pnl);
     final double day_percent = NormalizeTinyValue(total_day_change_percent);
     final String day_sign = day_pnl >= 0 ? '+' : '';
@@ -144,7 +144,7 @@ class SummaryStatCards extends StatelessWidget {
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              money.format(total_market_value),
+              FormatMoney(total_market_value, display_currency),
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,
@@ -164,7 +164,7 @@ class SummaryStatCards extends StatelessWidget {
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
-                  '今日 $day_sign${money.format(day_pnl)}　'
+                  '今日 $day_sign${FormatMoney(day_pnl, display_currency)}　'
                   '$day_sign${day_percent.toStringAsFixed(2)}%',
                   style: TextStyle(
                     fontSize: 12.5,
@@ -187,7 +187,6 @@ class SummaryStatCards extends StatelessWidget {
     required double height,
     required double value_font_size,
   }) {
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
     final double unrealized = NormalizeTinyValue(total_unrealized_pnl);
     final double unrealized_percent =
         NormalizeTinyValue(total_unrealized_pnl_percent);
@@ -202,7 +201,7 @@ class SummaryStatCards extends StatelessWidget {
         height: height,
         value_font_size: value_font_size,
         title: '總成本',
-        value: money.format(total_cost_basis),
+        value: FormatMoney(total_cost_basis, display_currency),
         subtitle: '投入本金',
       ),
       _BuildStatCard(
@@ -211,7 +210,7 @@ class SummaryStatCards extends StatelessWidget {
         height: height,
         value_font_size: value_font_size,
         title: '未實現損益',
-        value: '$unrealized_sign${money.format(unrealized)}',
+        value: '$unrealized_sign${FormatMoney(unrealized, display_currency)}',
         subtitle: '$unrealized_sign${unrealized_percent.toStringAsFixed(2)}%',
         value_color: profit_colors.ResolveColorForValue(unrealized),
         subtitle_color: profit_colors.ResolveColorForValue(unrealized),
@@ -222,7 +221,7 @@ class SummaryStatCards extends StatelessWidget {
         height: height,
         value_font_size: value_font_size,
         title: '已實現損益',
-        value: '$realized_sign${money.format(realized)}',
+        value: '$realized_sign${FormatMoney(realized, display_currency)}',
         subtitle: '含已清倉',
         value_color: profit_colors.ResolveColorForValue(realized),
       ),
@@ -233,7 +232,7 @@ class SummaryStatCards extends StatelessWidget {
           height: height,
           value_font_size: value_font_size,
           title: '累計股息',
-          value: money.format(total_dividend_income),
+          value: FormatMoney(total_dividend_income, display_currency),
           subtitle: '依除息日持股計算',
         ),
       _BuildStatCard(

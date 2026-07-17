@@ -25,6 +25,7 @@ VOO,585.32,2026/07/10,16:00 EDT,3.21,580.11,586.0,579.85,4203662,20260505,558.75
 AAPL,232.5,2026/07/10,16:00 EDT,1.05,230.9,233.1,230.2,52036620,20260220,241.8,3.0,,,,,BUY
 AAPL,232.5,2026/07/10,16:00 EDT,1.05,230.9,233.1,230.2,52036620,20260415,215.4,2.0,,,,,BUY
 GOOG,201.44,2026/07/10,16:00 EDT,-0.88,202.0,203.5,200.7,18203662,20260115,192.3,2.5,,,,,BUY
+2330.TW,1050.0,2026/07/10,13:30,10.0,1040.0,1055.0,1038.0,25036620,20260401,950.0,10.0,,,,,BUY
 ''';
 
 /// 啟動 App 前先灌測試資料（flutter drive 重裝 App 會清掉容器資料）。
@@ -41,10 +42,16 @@ Future<void> SeedWalkthroughData() async {
     group_name: 'ETF',
   );
   await database.watchlistDao.AddSymbol(
-    'TSM',
-    'Taiwan Semiconductor',
+    '2330.TW',
+    'Taiwan Semiconductor Manufacturing Company Limited',
     2,
     group_name: 'AI 概念股',
+  );
+  await database.watchlistDao.AddSymbol(
+    '0050.TW',
+    '元大台灣50',
+    3,
+    group_name: 'ETF',
   );
   await database.close();
 }
@@ -108,6 +115,19 @@ void main() {
     await tester.tap(find.text('自選'));
     await tester.pump(const Duration(seconds: 1));
     await binding.takeScreenshot('tab2_watchlist');
+
+    // 開啟台股詳情並捲到新聞區，確認不會顯示 Yahoo 全站熱門新聞。
+    await tester.tap(find.text('2330.TW'));
+    await tester.pump(const Duration(seconds: 12));
+    await tester.scrollUntilVisible(
+      find.text('相關新聞'),
+      500,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.pumpAndSettle();
+    await binding.takeScreenshot('tab2_taiwan_stock_news');
+    await tester.tap(find.byType(BackButton));
+    await tester.pump(const Duration(milliseconds: 600));
 
     await tester.tap(find.text('設定'));
     await tester.pump(const Duration(seconds: 1));

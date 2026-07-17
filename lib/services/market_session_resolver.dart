@@ -21,6 +21,7 @@ import '../models/market_session.dart';
 class MarketSessionResolver {
   static bool _timezone_initialized = false;
   static late tz.Location _new_york;
+  static late tz.Location _taipei;
 
   /// 初始化 IANA 時區資料庫（整個 App 生命週期呼叫一次即可，重複呼叫無害）。
   static void InitializeTimeZoneDatabase() {
@@ -29,6 +30,7 @@ class MarketSessionResolver {
     }
     tz_data.initializeTimeZones();
     _new_york = tz.getLocation('America/New_York');
+    _taipei = tz.getLocation('Asia/Taipei');
     _timezone_initialized = true;
   }
 
@@ -74,5 +76,47 @@ class MarketSessionResolver {
   /// 判斷「現在」屬於哪個美股交易時段。
   MarketSession ResolveCurrentMarketSession() {
     return ResolveMarketSessionAt(DateTime.now());
+  }
+
+  /*
+   *  @fn      MarketSession ResolveSessionForMarket(String market_id, DateTime moment)
+   *
+   *  @brief   ( 依市場判斷指定時間點的交易時段：美股沿用四段制，台股僅盤中／休市 )
+   *
+   *  @param   market_id - 市場代號（'us' | 'tw'）
+   *  @param   moment - 任意時區的時間點
+   *
+   *  @return  MarketSession；台股只會回傳 regular（盤中）或 closed（休市），
+   *           無盤前盤後
+   *
+   *  @note    台股盤中為週一至週五 09:00–13:30（Asia/Taipei），其餘為休市。
+   *           需先呼叫 InitializeTimeZoneDatabase()。
+   */
+  MarketSession ResolveSessionForMarket(String market_id, DateTime moment) {
+    if (market_id == 'tw') {
+      return _ResolveTaiwanSessionAt(moment);
+    }
+    return ResolveMarketSessionAt(moment);
+  }
+
+  /// 判斷台股時段：週一至週五 09:00–13:30（台北）為盤中，其餘休市。
+  MarketSession _ResolveTaiwanSessionAt(DateTime moment) {
+    InitializeTimeZoneDatabase();
+    final tz.TZDateTime taipei_time =
+        tz.TZDateTime.from(moment.toUtc(), _taipei);
+
+    if (taipei_time.weekday == DateTime.saturday ||
+        taipei_time.weekday == DateTime.sunday) {
+      return MarketSession.closed;
+    }
+
+    final int minutes_of_day = taipei_time.hour * 60 + taipei_time.minute;
+    const int REGULAR_START = 9 * 60; // 09:00
+    const int REGULAR_END = 13 * 60 + 30; // 13:30
+
+    if (minutes_of_day >= REGULAR_START && minutes_of_day < REGULAR_END) {
+      return MarketSession.regular;
+    }
+    return MarketSession.closed;
   }
 }

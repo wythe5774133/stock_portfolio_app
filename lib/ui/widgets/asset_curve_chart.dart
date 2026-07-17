@@ -2,9 +2,9 @@
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../models/portfolio_snapshot.dart';
+import '../money_format.dart';
 
 /*
  * @author  Toby
@@ -20,8 +20,13 @@ class AssetCurveChart extends StatelessWidget {
   static const Color COST_COLOR = Color(0xFF9CA3AF);
 
   final List<PortfolioSnapshot> history;
+  final String currency; // 序列已換算後的顯示幣別，供金額格式化
 
-  const AssetCurveChart({super.key, required this.history});
+  const AssetCurveChart({
+    super.key,
+    required this.history,
+    required this.currency,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -109,8 +114,7 @@ class AssetCurveChart extends StatelessWidget {
                         return const SizedBox.shrink();
                       }
                       return Text(
-                        NumberFormat.compactCurrency(symbol: r'$')
-                            .format(value),
+                        FormatMoney(value, currency, compact: true),
                         style:
                             const TextStyle(fontSize: 11, color: Colors.grey),
                       );
@@ -151,7 +155,7 @@ class AssetCurveChart extends StatelessWidget {
                           FormatDateLabel(history[spot.x.toInt()].date);
                       return LineTooltipItem(
                         '$date_label $series_name\n'
-                        '${NumberFormat.currency(symbol: r'$').format(spot.y)}',
+                        '${FormatMoney(spot.y, currency)}',
                         const TextStyle(color: Colors.white, fontSize: 12),
                       );
                     }).toList();

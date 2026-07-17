@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../database/quote_cache_dao.dart';
+import '../logic/market_registry.dart';
 import '../models/market_session.dart';
 import '../models/stock_quote.dart';
 import 'market_session_resolver.dart';
@@ -131,18 +132,67 @@ class QuotePollingScheduler extends ChangeNotifier {
     if (!_is_running) {
       return;
     }
+    // current_session 維持美股時段（供 UI 橫幅顯示）；輪詢決策改用跨市場彙總時段。
     current_session = session_resolver.ResolveCurrentMarketSession();
-    if (current_session != MarketSession.closed) {
+    final List<String> symbols = await ProvideTrackedSymbols();
+    final MarketSession aggregate_session = ResolveAggregateSession(symbols);
+    if (aggregate_session != MarketSession.closed) {
       await PollQuotesNow();
     } else {
-      notifyListeners(); // 休市：只更新時段顯示，不發請求
+      notifyListeners(); // 全市場休市：只更新時段顯示，不發請求
     }
 
     if (!_is_running) {
       return;
     }
-    final Duration interval = ResolvePollInterval(current_session);
+    final Duration interval = ResolvePollInterval(aggregate_session);
     _poll_timer = Timer(interval, _PollOnceAndScheduleNext);
+  }
+
+  /*
+   *  @fn      MarketSession ResolveAggregateSession(List<String> symbols)
+   *
+   *  @brief   ( 取所有出現市場中最活躍的時段，決定輪詢積極度 )
+   *
+   *  @param   symbols - 目前追蹤的代號清單
+   *
+   *  @return  彙總時段：任一市場盤中→regular；否則任一盤前後→premarket；全休市→closed
+   *
+   *  @note    無追蹤代號時預設以美股時段判斷，維持既有行為。
+   *           台股盤中而美股休市時，彙總為 regular，仍以 45 秒輪詢。
+   */
+  MarketSession ResolveAggregateSession(List<String> symbols) {
+    final Set<String> market_ids = symbols.isEmpty
+        ? <String>{'us'}
+        : symbols
+            .map((String s) => ResolveMarketForSymbol(s).market_id)
+            .toSet();
+    final DateTime now = DateTime.now();
+    MarketSession best = MarketSession.closed;
+    for (final String market_id in market_ids) {
+      final MarketSession session =
+          session_resolver.ResolveSessionForMarket(market_id, now);
+      best = _MoreActiveSession(best, session);
+    }
+    return best;
+  }
+
+  /// 比較兩個時段的活躍度，回傳較活躍者（regular > premarket/postmarket > closed）。
+  static MarketSession _MoreActiveSession(MarketSession a, MarketSession b) {
+    return _SessionActivityRank(a) >= _SessionActivityRank(b) ? a : b;
+  }
+
+  /// 時段活躍度排名（數字越大越活躍）。
+  static int _SessionActivityRank(MarketSession session) {
+    switch (session) {
+      case MarketSession.regular:
+        return 2;
+      case MarketSession.premarket:
+      case MarketSession.postmarket:
+        return 1;
+      case MarketSession.closed:
+        return 0;
+    }
   }
 
   /// 依時段決定輪詢間隔。

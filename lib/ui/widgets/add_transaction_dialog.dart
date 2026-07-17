@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
+import '../../logic/market_registry.dart';
 import '../../models/stock_transaction.dart';
 import '../../models/symbol_search_result.dart';
 import '../dashboard_controller.dart';
+import '../money_format.dart';
 import '../theme/app_theme.dart';
 
 /*
@@ -320,8 +322,11 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
     );
   }
 
-  /// 價格輸入框（選定股票後自動帶入現價）。
+  /// 價格輸入框（選定股票後自動帶入現價，前綴依代號市場切換幣別）。
   Widget _BuildPriceField() {
+    // 依目前輸入的代號判斷市場，即時切換幣別前綴（台股 NT$、美股 $）
+    final String currency =
+        ResolveMarketForSymbol(symbol_controller.text.trim()).currency;
     return TextField(
       controller: price_controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -330,7 +335,7 @@ class _AddTransactionDialogState extends State<AddTransactionDialog> {
       ],
       decoration: InputDecoration(
         labelText: '價格',
-        prefixText: r'$ ',
+        prefixText: '${ResolveCurrencySymbol(currency)} ',
         border: const OutlineInputBorder(),
         suffixIcon: is_price_loading
             ? const Padding(

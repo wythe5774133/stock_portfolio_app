@@ -2,9 +2,11 @@
 
 import 'package:flutter/material.dart';
 
+import '../../logic/market_registry.dart';
 import '../../models/stock_transaction.dart';
 import '../../services/csv_transaction_importer.dart';
 import '../dashboard_controller.dart';
+import '../money_format.dart';
 import '../theme/app_theme.dart';
 
 class CsvImportPreviewDialog extends StatefulWidget {
@@ -173,7 +175,9 @@ class _CsvImportPreviewDialogState extends State<CsvImportPreviewDialog> {
                             ),
                             DataCell(
                               Text(
-                                transaction.purchase_price.toStringAsFixed(4),
+                                // 原生幣別前綴（台股 NT$、美股 $），保留 4 位精度
+                                '${ResolveCurrencySymbol(ResolveMarketForSymbol(transaction.symbol).currency)}'
+                                '${transaction.purchase_price.toStringAsFixed(4)}',
                               ),
                             ),
                             DataCell(Text(transaction.quantity.toString())),

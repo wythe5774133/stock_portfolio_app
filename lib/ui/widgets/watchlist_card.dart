@@ -4,8 +4,10 @@
 import 'package:flutter/material.dart';
 
 import '../../database/app_database.dart' show WatchlistSymbol;
+import '../../logic/market_registry.dart';
 import '../../models/stock_quote.dart';
 import '../dashboard_controller.dart';
+import '../money_format.dart';
 import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
 
@@ -88,9 +90,10 @@ class WatchlistCard extends StatelessWidget {
   Widget _BuildWatchlistRow(BuildContext context, WatchlistSymbol entry,
       Map<String, StockQuote> quotes, AppColors colors) {
     final StockQuote? quote = quotes[entry.symbol];
+    final MarketInfo market = ResolveMarketForSymbol(entry.symbol);
     final (double?, String) price_and_label =
         DashboardController.ResolveDisplayPrice(
-            quote, controller.current_session);
+            quote, controller.SessionForMarket(market.market_id), market);
     double? change_percent;
     if (quote?.regular_price != null && quote?.previous_close != null) {
       change_percent = (quote!.regular_price! - quote.previous_close!) /
@@ -114,9 +117,21 @@ class WatchlistCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Text(entry.symbol,
-                      style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w700)),
+                  Row(
+                    children: <Widget>[
+                      Flexible(
+                        child: Text(entry.symbol,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 14.5, fontWeight: FontWeight.w700)),
+                      ),
+                      // 台股加低調市場標籤；美股不加，避免雜訊
+                      if (market.market_id == 'tw') ...<Widget>[
+                        const SizedBox(width: 6),
+                        _BuildMarketBadge(market.market_label, colors),
+                      ],
+                    ],
+                  ),
                   Text(
                     entry.name,
                     overflow: TextOverflow.ellipsis,
@@ -136,7 +151,7 @@ class WatchlistCard extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     child: Text(
                       price_and_label.$1 != null
-                          ? '\$${price_and_label.$1!.toStringAsFixed(2)}'
+                          ? FormatMoney(price_and_label.$1!, market.currency)
                           : '—',
                       maxLines: 1,
                       style: const TextStyle(
@@ -198,6 +213,25 @@ class WatchlistCard extends StatelessWidget {
               ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// 市場標籤徽章：小字、subtle 底、圓角，低調不搶眼。
+  Widget _BuildMarketBadge(String label, AppColors colors) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: colors.subtle_background,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: colors.text_secondary,
         ),
       ),
     );

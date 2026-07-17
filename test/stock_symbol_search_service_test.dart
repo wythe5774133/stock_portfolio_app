@@ -44,7 +44,8 @@ void main() {
     test('保留股票與 ETF、過濾選擇權、longname 優先', () {
       final List<SymbolSearchResult> results =
           StockSymbolSearchService.ParseSearchResponseJson(
-              SEARCH_RESPONSE_FIXTURE);
+            SEARCH_RESPONSE_FIXTURE,
+          );
       expect(results.length, 3);
       expect(results[0].symbol, 'NVDA');
       expect(results[0].name, 'NVIDIA Corporation');
@@ -54,8 +55,9 @@ void main() {
 
     test('格式不符回傳空清單', () {
       expect(
-          StockSymbolSearchService.ParseSearchResponseJson(<String, dynamic>{}),
-          isEmpty);
+        StockSymbolSearchService.ParseSearchResponseJson(<String, dynamic>{}),
+        isEmpty,
+      );
     });
   });
 
@@ -85,8 +87,35 @@ void main() {
 
     test('無 news 欄位回傳空清單', () {
       expect(
-          StockSymbolSearchService.ParseNewsResponseJson(<String, dynamic>{}),
-          isEmpty);
+        StockSymbolSearchService.ParseNewsResponseJson(<String, dynamic>{}),
+        isEmpty,
+      );
+    });
+
+    test('指定相關代號時會排除不相干新聞', () {
+      final Map<String, dynamic> fixture = <String, dynamic>{
+        'news': <dynamic>[
+          <String, dynamic>{
+            'title': 'Taiwan Semiconductor reports earnings',
+            'publisher': 'Reuters',
+            'link': 'https://example.com/tsm',
+            'relatedTickers': <String>['TSM'],
+          },
+          <String, dynamic>{
+            'title': 'McDonald’s shares fall',
+            'publisher': 'Yahoo Finance',
+            'link': 'https://example.com/mcd',
+            'relatedTickers': <String>['MCD'],
+          },
+        ],
+      };
+      final List<StockNewsItem> items =
+          StockSymbolSearchService.ParseNewsResponseJson(
+            fixture,
+            relevant_symbols: <String>{'2330.TW', 'TSM'},
+          );
+      expect(items.length, 1);
+      expect(items.single.title, contains('Taiwan Semiconductor'));
     });
   });
 
@@ -97,10 +126,12 @@ void main() {
         expect(request.url.queryParameters['q'], 'NVDA');
         return http.Response(jsonEncode(SEARCH_RESPONSE_FIXTURE), 200);
       });
-      final StockSymbolSearchService service =
-          StockSymbolSearchService(http_client: mock_client);
-      final List<SymbolSearchResult> results =
-          await service.SearchSymbols('NVDA');
+      final StockSymbolSearchService service = StockSymbolSearchService(
+        http_client: mock_client,
+      );
+      final List<SymbolSearchResult> results = await service.SearchSymbols(
+        'NVDA',
+      );
       expect(results.length, 3);
     });
 
@@ -111,10 +142,12 @@ void main() {
         }
         return http.Response(jsonEncode(SEARCH_RESPONSE_FIXTURE), 200);
       });
-      final StockSymbolSearchService service =
-          StockSymbolSearchService(http_client: mock_client);
-      final List<SymbolSearchResult> results =
-          await service.SearchSymbols('NVDA');
+      final StockSymbolSearchService service = StockSymbolSearchService(
+        http_client: mock_client,
+      );
+      final List<SymbolSearchResult> results = await service.SearchSymbols(
+        'NVDA',
+      );
       expect(results, isNotEmpty);
     });
 
@@ -122,8 +155,9 @@ void main() {
       final MockClient mock_client = MockClient((http.Request request) async {
         return http.Response('Too Many Requests', 429);
       });
-      final StockSymbolSearchService service =
-          StockSymbolSearchService(http_client: mock_client);
+      final StockSymbolSearchService service = StockSymbolSearchService(
+        http_client: mock_client,
+      );
       expect(await service.SearchSymbols('NVDA'), isEmpty);
     });
 
@@ -131,9 +165,80 @@ void main() {
       final MockClient mock_client = MockClient((http.Request request) async {
         fail('不應發出請求');
       });
-      final StockSymbolSearchService service =
-          StockSymbolSearchService(http_client: mock_client);
+      final StockSymbolSearchService service = StockSymbolSearchService(
+        http_client: mock_client,
+      );
       expect(await service.SearchSymbols('  '), isEmpty);
+    });
+  });
+
+  group('FetchNewsForSymbol', () {
+    test('台股改用公司名稱查詢並只保留相關標的新聞', () async {
+      final MockClient mock_client = MockClient((http.Request request) async {
+        expect(
+          request.url.queryParameters['q'],
+          'Taiwan Semiconductor Manufacturing Company Limited',
+        );
+        expect(request.url.queryParameters['quotesCount'], '1');
+        expect(request.url.queryParameters['newsCount'], '20');
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'quotes': <dynamic>[
+              <String, dynamic>{'symbol': 'TSM'},
+            ],
+            'news': <dynamic>[
+              <String, dynamic>{
+                'title': 'TSMC raises its outlook',
+                'publisher': 'Reuters',
+                'link': 'https://example.com/tsm',
+                'relatedTickers': <String>['TSM'],
+              },
+              <String, dynamic>{
+                'title': 'Unrelated restaurant news',
+                'publisher': 'X',
+                'link': 'https://example.com/food',
+                'relatedTickers': <String>['MCD'],
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final StockSymbolSearchService service = StockSymbolSearchService(
+        http_client: mock_client,
+      );
+      final List<StockNewsItem> items = await service.FetchNewsForSymbol(
+        '2330.TW',
+        display_name: 'Taiwan Semiconductor Manufacturing Company Limited',
+      );
+      expect(items.length, 1);
+      expect(items.single.title, 'TSMC raises its outlook');
+    });
+
+    test('美股維持以股票代號查詢', () async {
+      final MockClient mock_client = MockClient((http.Request request) async {
+        expect(request.url.queryParameters['q'], 'NVDA');
+        expect(request.url.queryParameters['quotesCount'], '0');
+        return http.Response(
+          jsonEncode(<String, dynamic>{
+            'news': <dynamic>[
+              <String, dynamic>{
+                'title': 'NVIDIA news',
+                'publisher': 'Reuters',
+                'link': 'https://example.com/nvda',
+              },
+            ],
+          }),
+          200,
+        );
+      });
+      final StockSymbolSearchService service = StockSymbolSearchService(
+        http_client: mock_client,
+      );
+      final List<StockNewsItem> items = await service.FetchNewsForSymbol(
+        'NVDA',
+      );
+      expect(items.single.title, 'NVIDIA news');
     });
   });
 }

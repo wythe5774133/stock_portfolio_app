@@ -7,6 +7,7 @@ import '../models/holding_position.dart';
 import '../models/portfolio_snapshot.dart';
 import '../models/portfolio_risk_metrics.dart';
 import '../models/stock_transaction.dart';
+import 'market_registry.dart';
 
 /*
  * @author  Toby
@@ -27,6 +28,78 @@ class PortfolioCalculator {
 
   /// 浮點數量比較容差（碎股計算用）
   static const double QUANTITY_EPSILON = 1e-9;
+
+  /*
+   *  @fn      static double ConvertCurrencyValue(double value, String from_currency, String display_currency, double usd_twd)
+   *
+   *  @brief   ( 將 from_currency 金額換算為 display_currency )
+   *
+   *  @param   value - 原始金額
+   *  @param   from_currency - 原始幣別（USD / TWD）
+   *  @param   display_currency - 目標顯示幣別（USD / TWD）
+   *  @param   usd_twd - 1 美元兌台幣匯率（例如 32.3）
+   *
+   *  @return  換算後金額
+   *
+   *  @note    方向：USD→TWD 乘以匯率、TWD→USD 除以匯率、同幣別原值返回。
+   *           匯率無效（≤0）時不換算，直接返回原值避免除以零；
+   *           同幣別走捷徑不經過任何乘除，確保全美股組合 bit-for-bit 一致。
+   */
+  static double ConvertCurrencyValue(
+    double value,
+    String from_currency,
+    String display_currency,
+    double usd_twd,
+  ) {
+    if (from_currency == display_currency) {
+      return value;
+    }
+    if (usd_twd <= 0) {
+      return value; // 匯率不可用時退回原值（呼叫端會另行降級顯示）
+    }
+    if (from_currency == 'USD' && display_currency == 'TWD') {
+      return value * usd_twd;
+    }
+    if (from_currency == 'TWD' && display_currency == 'USD') {
+      return value / usd_twd;
+    }
+    return value; // 未知幣別組合：保守返回原值
+  }
+
+  /*
+   *  @fn      static double ResolveForwardFilledRate(List<int> sorted_dates, Map<int, double> rates, int date)
+   *
+   *  @brief   ( 往前遞補查詢某日匯率：取 ≤ 該日的最近一筆，皆無更早則取最早一筆 )
+   *
+   *  @param   sorted_dates - 已升冪排序的匯率日期（yyyyMMdd）
+   *  @param   rates - {yyyyMMdd: 1 美元兌台幣}
+   *  @param   date - 欲查詢的日期（yyyyMMdd）
+   *
+   *  @return  遞補後的匯率；rates 為空時回傳 1.0（等同不換算）
+   *
+   *  @note    週末、假日或未涵蓋的日期沿用前一個已知匯率。
+   */
+  static double ResolveForwardFilledRate(
+    List<int> sorted_dates,
+    Map<int, double> rates,
+    int date,
+  ) {
+    if (sorted_dates.isEmpty) {
+      return 1.0;
+    }
+    if (date <= sorted_dates.first) {
+      return rates[sorted_dates.first]!;
+    }
+    double result = rates[sorted_dates.first]!;
+    for (final int d in sorted_dates) {
+      if (d <= date) {
+        result = rates[d]!;
+      } else {
+        break;
+      }
+    }
+    return result;
+  }
 
   /*
    *  @fn      List<HoldingPosition> CalculateHoldingPositions(List<StockTransaction> transactions)
@@ -110,18 +183,33 @@ class PortfolioCalculator {
    *  @note    無收盤價的日期（週末、假日）沿用前一個已知價格；
    *           某代號尚無任何歷史價時，以最近一次買入價代替，
    *           確保曲線從第一天起就有合理數值。
+   *
+   *  @param   display_currency - 顯示幣別（USD / TWD），預設 USD
+   *  @param   usd_twd_by_date - {yyyyMMdd: 1 美元兌台幣} 歷史匯率，可為空 map；
+   *           缺日以往前遞補處理。全美股且 USD 顯示時不觸發任何換算，
+   *           行為與未帶幣別參數時 bit-for-bit 一致。
    */
   List<PortfolioSnapshot> CalculateDailyPortfolioHistory(
     List<StockTransaction> transactions,
     Map<String, Map<int, double>> historical_closes,
-    int today_date,
-  ) {
+    int today_date, {
+    String display_currency = 'USD',
+    Map<int, double> usd_twd_by_date = const <int, double>{},
+  }) {
     if (transactions.isEmpty) {
       return <PortfolioSnapshot>[];
     }
 
     final Map<String, List<StockTransaction>> grouped =
         GroupTransactionsBySymbol(transactions);
+
+    // 各代號的原生幣別（換算到 display_currency 用）
+    final Map<String, String> currency_by_symbol = <String, String>{
+      for (final String s in grouped.keys)
+        s: ResolveMarketForSymbol(s).currency,
+    };
+    // 匯率日期預先排序，供逐日往前遞補查詢
+    final List<int> sorted_rate_dates = usd_twd_by_date.keys.toList()..sort();
 
     // 各代號的重播狀態
     final Map<String, double> quantity_by_symbol = <String, double>{};
@@ -141,10 +229,17 @@ class PortfolioCalculator {
     final List<PortfolioSnapshot> snapshots = <PortfolioSnapshot>[];
     while (!cursor.isAfter(end)) {
       final int date = ConvertDateTimeToYyyymmdd(cursor);
+      // 當日匯率（往前遞補），供各幣別金額換算到 display_currency
+      final double usd_twd = ResolveForwardFilledRate(
+        sorted_rate_dates,
+        usd_twd_by_date,
+        date,
+      );
 
-      // 先套用當日全部交易，同時累計當日淨投入現金流
+      // 先套用當日全部交易，同時累計當日淨投入現金流（已換算為 display_currency）
       double day_cash_flow = 0.0;
       for (final String symbol in grouped.keys) {
+        final String currency = currency_by_symbol[symbol]!;
         final List<StockTransaction> txs = grouped[symbol]!;
         int index = next_tx_index[symbol]!;
         while (index < txs.length && txs[index].trade_date <= date) {
@@ -154,7 +249,12 @@ class PortfolioCalculator {
           if (tx.transaction_type == TransactionType.buy) {
             quantity_by_symbol[symbol] = quantity + tx.quantity;
             cost_by_symbol[symbol] = cost + tx.purchase_price * tx.quantity;
-            day_cash_flow += tx.purchase_price * tx.quantity;
+            day_cash_flow += ConvertCurrencyValue(
+              tx.purchase_price * tx.quantity,
+              currency,
+              display_currency,
+              usd_twd,
+            );
             // 尚無歷史價時以買入價當作已知價格起點
             last_known_price.putIfAbsent(symbol, () => tx.purchase_price);
           } else if (tx.quantity <= quantity + QUANTITY_EPSILON) {
@@ -169,25 +269,41 @@ class PortfolioCalculator {
             }
             quantity_by_symbol[symbol] = new_quantity;
             cost_by_symbol[symbol] = new_cost;
-            day_cash_flow -= tx.purchase_price * tx.quantity; // 賣出所得
+            day_cash_flow -= ConvertCurrencyValue(
+              tx.purchase_price * tx.quantity,
+              currency,
+              display_currency,
+              usd_twd,
+            ); // 賣出所得
           }
           index++;
         }
         next_tx_index[symbol] = index;
       }
 
-      // 更新當日已知價格並累計市值與成本
+      // 更新當日已知價格並累計市值與成本（各檔先換算到 display_currency 再加總）
       double total_market_value = 0.0;
       double total_cost_basis = 0.0;
       for (final String symbol in grouped.keys) {
+        final String currency = currency_by_symbol[symbol]!;
         final double quantity = quantity_by_symbol[symbol] ?? 0.0;
         final double? today_close = historical_closes[symbol]?[date];
         if (today_close != null) {
           last_known_price[symbol] = today_close;
         }
         if (quantity > QUANTITY_EPSILON) {
-          total_market_value += quantity * (last_known_price[symbol] ?? 0.0);
-          total_cost_basis += cost_by_symbol[symbol] ?? 0.0;
+          total_market_value += ConvertCurrencyValue(
+            quantity * (last_known_price[symbol] ?? 0.0),
+            currency,
+            display_currency,
+            usd_twd,
+          );
+          total_cost_basis += ConvertCurrencyValue(
+            cost_by_symbol[symbol] ?? 0.0,
+            currency,
+            display_currency,
+            usd_twd,
+          );
         }
       }
 

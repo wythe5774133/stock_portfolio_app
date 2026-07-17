@@ -2,10 +2,10 @@
 // 每列可點擊展開顯示交易明細。
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../models/stock_transaction.dart';
 import '../dashboard_controller.dart';
+import '../money_format.dart';
 import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
@@ -49,25 +49,80 @@ class HoldingListView extends StatelessWidget {
     }
 
     final AppColors colors = AppColors.Of(context);
+    // 依市場分組（保留原有市值降序）：同時存在美股與台股才分區顯示節標題
+    final Map<String, List<HoldingDisplayRow>> groups = GroupRowsByMarket(rows);
+    final bool show_group_headers = groups.length > 1;
+
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool is_compact = constraints.maxWidth < COMPACT_BREAKPOINT;
-        return Column(
-          children: <Widget>[
-            _BuildHeaderRow(context, is_compact),
-            Divider(height: 1, color: colors.card_border),
-            for (int i = 0; i < rows.length; i++) ...<Widget>[
-              if (i > 0) Divider(height: 1, color: colors.divider),
-              _HoldingExpandableRow(
-                row: rows[i],
-                profit_colors: profit_colors,
-                controller: controller,
-                is_compact: is_compact,
-              ),
-            ],
-          ],
-        );
+        final List<Widget> children = <Widget>[
+          _BuildHeaderRow(context, is_compact),
+          Divider(height: 1, color: colors.card_border),
+        ];
+        for (final MapEntry<String, List<HoldingDisplayRow>> group
+            in groups.entries) {
+          if (show_group_headers) {
+            children.add(
+              _BuildGroupHeader(colors, group.value.first.market.market_label),
+            );
+          }
+          for (int i = 0; i < group.value.length; i++) {
+            // 群組內列與列之間才畫分隔線，節標題下方不畫
+            if (i > 0) {
+              children.add(Divider(height: 1, color: colors.divider));
+            }
+            children.add(_HoldingExpandableRow(
+              row: group.value[i],
+              profit_colors: profit_colors,
+              controller: controller,
+              is_compact: is_compact,
+            ));
+          }
+        }
+        return Column(children: children);
       },
+    );
+  }
+
+  /*
+   *  @fn      static Map<String, List<HoldingDisplayRow>> GroupRowsByMarket(List<HoldingDisplayRow> rows)
+   *
+   *  @brief   ( 依市場代號穩定分組，保留傳入的市值降序 )
+   *
+   *  @param   rows - 已排序的持倉顯示列
+   *
+   *  @return  market_id → 該市場的列（依首次出現順序）
+   *
+   *  @note    Dart Map 保留插入順序，故群組順序即各市場首檔的出現順序。
+   */
+  static Map<String, List<HoldingDisplayRow>> GroupRowsByMarket(
+    List<HoldingDisplayRow> rows,
+  ) {
+    final Map<String, List<HoldingDisplayRow>> groups =
+        <String, List<HoldingDisplayRow>>{};
+    for (final HoldingDisplayRow row in rows) {
+      groups.putIfAbsent(row.market.market_id, () => <HoldingDisplayRow>[])
+          .add(row);
+    }
+    return groups;
+  }
+
+  /// 市場分區的低調節標題（「美股」／「台股」）。
+  Widget _BuildGroupHeader(AppColors colors, String label) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: colors.text_secondary,
+          ),
+        ),
+      ),
     );
   }
 
@@ -157,7 +212,7 @@ class _HoldingExpandableRow extends StatelessWidget {
   /// 手機緊湊列：代號+持股 / 現價+今日漲跌 / 損益。
   Widget _BuildCompactTitle(BuildContext context) {
     final AppColors colors = AppColors.Of(context);
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
+    final String currency = row.market.currency;
     final Color pnl_color =
         profit_colors.ResolveColorForValue(row.unrealized_pnl);
     final String sign = row.unrealized_pnl >= 0 ? '+' : '';
@@ -186,7 +241,7 @@ class _HoldingExpandableRow extends StatelessWidget {
             children: <Widget>[
               _BuildSingleLineText(
                 row.current_price != null
-                    ? money.format(row.current_price)
+                    ? FormatMoney(row.current_price!, currency)
                     : '—',
                 const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               ),
@@ -212,7 +267,7 @@ class _HoldingExpandableRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
               _BuildSingleLineText(
-                '$sign${money.format(row.unrealized_pnl)}',
+                '$sign${FormatMoney(row.unrealized_pnl, currency)}',
                 TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -241,7 +296,7 @@ class _HoldingExpandableRow extends StatelessWidget {
 
   /// 桌面完整六欄列。
   Widget _BuildWideTitle() {
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
+    final String currency = row.market.currency;
     final Color pnl_color =
         profit_colors.ResolveColorForValue(row.unrealized_pnl);
     final String sign = row.unrealized_pnl >= 0 ? '+' : '';
@@ -266,7 +321,7 @@ class _HoldingExpandableRow extends StatelessWidget {
         Expanded(
           flex: 3,
           child: Text(
-            money.format(row.position.average_cost),
+            FormatMoney(row.position.average_cost, currency),
             textAlign: TextAlign.right,
             style: const TextStyle(fontSize: 14),
           ),
@@ -278,7 +333,7 @@ class _HoldingExpandableRow extends StatelessWidget {
             children: <Widget>[
               Text(
                 row.current_price != null
-                    ? money.format(row.current_price)
+                    ? FormatMoney(row.current_price!, currency)
                     : '—',
                 style: const TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w600),
@@ -303,7 +358,7 @@ class _HoldingExpandableRow extends StatelessWidget {
         Expanded(
           flex: 4,
           child: Text(
-            money.format(row.market_value),
+            FormatMoney(row.market_value, currency),
             textAlign: TextAlign.right,
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
           ),
@@ -314,7 +369,7 @@ class _HoldingExpandableRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
               Text(
-                '$sign${money.format(row.unrealized_pnl)}',
+                '$sign${FormatMoney(row.unrealized_pnl, currency)}',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -334,7 +389,7 @@ class _HoldingExpandableRow extends StatelessWidget {
 
   /// 展開後的交易明細區塊。
   Widget _BuildTransactionDetail() {
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
+    final String currency = row.market.currency;
     final List<StockTransaction> transactions = row.position.transactions;
 
     return Builder(builder: (BuildContext context) {
@@ -363,14 +418,14 @@ class _HoldingExpandableRow extends StatelessWidget {
                 ),
                 if (is_compact)
                   Text(
-                    '均價 ${money.format(row.position.average_cost)}・'
-                    '市值 ${money.format(row.market_value)}',
+                    '均價 ${FormatMoney(row.position.average_cost, currency)}・'
+                    '市值 ${FormatMoney(row.market_value, currency)}',
                     style: TextStyle(
                         fontSize: 12, color: colors.text_secondary),
                   ),
                 if (row.dividend_income > 0)
                   Text(
-                    '累計股息 +${money.format(row.dividend_income)}',
+                    '累計股息 +${FormatMoney(row.dividend_income, currency)}',
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w600,
@@ -380,7 +435,7 @@ class _HoldingExpandableRow extends StatelessWidget {
                 Text(
                   '已實現損益 '
                   '${row.position.realized_pnl >= 0 ? '+' : ''}'
-                  '${money.format(row.position.realized_pnl)}',
+                  '${FormatMoney(row.position.realized_pnl, currency)}',
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
@@ -422,13 +477,13 @@ class _HoldingExpandableRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         '${FormatQuantity(tx.quantity)} 股 × '
-                        '${money.format(tx.purchase_price)}',
+                        '${FormatMoney(tx.purchase_price, currency)}',
                         style: const TextStyle(fontSize: 13),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
-                      money.format(tx.purchase_price * tx.quantity),
+                      FormatMoney(tx.purchase_price * tx.quantity, currency),
                       style: const TextStyle(
                           fontSize: 13, fontWeight: FontWeight.w600),
                     ),
@@ -470,7 +525,7 @@ class _HoldingExpandableRow extends StatelessWidget {
           '${tx.symbol}　${FormatTradeDate(tx.trade_date)}　'
           '${tx.transaction_type == TransactionType.buy ? '買入' : '賣出'} '
           '${FormatQuantity(tx.quantity)} 股 × '
-          '\$${tx.purchase_price.toStringAsFixed(2)}\n\n'
+          '${FormatMoney(tx.purchase_price, row.market.currency)}\n\n'
           '刪除後持倉與損益會立即重算，此動作無法復原。',
           style: const TextStyle(fontSize: 13.5, height: 1.5),
         ),

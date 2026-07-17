@@ -5,12 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../logic/market_registry.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/ohlcv_candle.dart';
 import '../models/stock_news_item.dart';
 import '../models/stock_quote.dart';
 import 'dashboard_controller.dart';
+import 'money_format.dart';
 import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
 
@@ -40,15 +42,21 @@ class StockDetailPage extends StatefulWidget {
   });
 
   /// 推入詳情頁。
-  static void Open(BuildContext context, DashboardController controller,
-      String symbol, String display_name) {
-    Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (BuildContext context) => StockDetailPage(
-        controller: controller,
-        symbol: symbol,
-        display_name: display_name,
+  static void Open(
+    BuildContext context,
+    DashboardController controller,
+    String symbol,
+    String display_name,
+  ) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (BuildContext context) => StockDetailPage(
+          controller: controller,
+          symbol: symbol,
+          display_name: display_name,
+        ),
       ),
-    ));
+    );
   }
 
   @override
@@ -58,8 +66,7 @@ class StockDetailPage extends StatefulWidget {
 class _StockDetailPageState extends State<StockDetailPage> {
   StockQuote? detail_quote; // 含 52 週/市值/本益比的完整報價
   CandleInterval selected_interval = CandleInterval.daily;
-  CandleRange selected_range =
-      GetDefaultRangeForInterval(CandleInterval.daily);
+  CandleRange selected_range = GetDefaultRangeForInterval(CandleInterval.daily);
   final Map<String, List<OhlcvCandle>> candle_cache =
       <String, List<OhlcvCandle>>{};
   bool is_chart_loading = true;
@@ -87,8 +94,8 @@ class _StockDetailPageState extends State<StockDetailPage> {
 
   /// 抓取個股相關新聞。
   Future<void> LoadNews() async {
-    final List<StockNewsItem> items =
-        await widget.controller.repository.FetchNewsForSymbol(widget.symbol);
+    final List<StockNewsItem> items = await widget.controller.repository
+        .FetchNewsForSymbol(widget.symbol, display_name: widget.display_name);
     if (!mounted) {
       return;
     }
@@ -105,8 +112,8 @@ class _StockDetailPageState extends State<StockDetailPage> {
 
   /// 抓取完整報價（52 週高低、市值、本益比等延伸欄位）。
   Future<void> LoadDetailQuote() async {
-    final StockQuote? quote =
-        await widget.controller.repository.FetchSingleQuote(widget.symbol);
+    final StockQuote? quote = await widget.controller.repository
+        .FetchSingleQuote(widget.symbol);
     if (!mounted) {
       return;
     }
@@ -197,8 +204,10 @@ class _StockDetailPageState extends State<StockDetailPage> {
                         const SizedBox(
                           height: 320,
                           child: Center(
-                            child: Text('K 線資料暫時無法取得',
-                                style: TextStyle(color: Colors.grey)),
+                            child: Text(
+                              'K 線資料暫時無法取得',
+                              style: TextStyle(color: Colors.grey),
+                            ),
                           ),
                         )
                       else ...<Widget>[
@@ -217,7 +226,9 @@ class _StockDetailPageState extends State<StockDetailPage> {
                         Text(
                           '捏合或滾輪縮放・拖曳平移・雙擊還原',
                           style: TextStyle(
-                              fontSize: 11, color: colors.text_muted),
+                            fontSize: 11,
+                            color: colors.text_muted,
+                          ),
                         ),
                       ],
                     ],
@@ -227,8 +238,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
                 _BuildCard(colors, child: _BuildQuoteInfoGrid(colors)),
                 if (FindHoldingPosition() != null) ...<Widget>[
                   const SizedBox(height: 16),
-                  _BuildCard(
-                      colors, child: _BuildHoldingSummary(colors)),
+                  _BuildCard(colors, child: _BuildHoldingSummary(colors)),
                 ],
                 const SizedBox(height: 16),
                 _BuildCard(colors, child: _BuildNewsSection(colors)),
@@ -246,9 +256,13 @@ class _StockDetailPageState extends State<StockDetailPage> {
     final Map<String, StockQuote> quotes =
         widget.controller.repository.quote_scheduler.latest_quotes;
     final StockQuote? quote = detail_quote ?? quotes[widget.symbol];
+    final MarketInfo market = ResolveMarketForSymbol(widget.symbol);
     final (double?, String) price_and_label =
         DashboardController.ResolveDisplayPrice(
-            quote, widget.controller.current_session);
+          quote,
+          widget.controller.SessionForMarket(market.market_id),
+          market,
+        );
     final double? price = price_and_label.$1;
 
     double? change;
@@ -268,7 +282,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
       crossAxisAlignment: WrapCrossAlignment.end,
       children: <Widget>[
         Text(
-          price != null ? '\$${price.toStringAsFixed(2)}' : '—',
+          price != null ? FormatMoney(price, market.currency) : '—',
           style: TextStyle(
             fontSize: 34,
             fontWeight: FontWeight.w800,
@@ -293,7 +307,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
           padding: const EdgeInsets.only(bottom: 6),
           child: Text(
             '${price_and_label.$2}價・'
-            '${FormatMarketSession_Zh(widget.controller.current_session)}',
+            '${FormatMarketSession_Zh(widget.controller.SessionForMarket(market.market_id))}',
             style: TextStyle(fontSize: 12.5, color: colors.text_muted),
           ),
         ),
@@ -311,15 +325,16 @@ class _StockDetailPageState extends State<StockDetailPage> {
           children: <Widget>[
             for (final CandleInterval interval in CandleInterval.values)
               ChoiceChip(
-                label: Text(FormatCandleInterval(interval),
-                    style: const TextStyle(fontSize: 12.5)),
+                label: Text(
+                  FormatCandleInterval(interval),
+                  style: const TextStyle(fontSize: 12.5),
+                ),
                 selected: selected_interval == interval,
                 showCheckmark: false,
                 visualDensity: VisualDensity.compact,
                 onSelected: (bool selected) {
                   if (selected) {
-                    LoadCandles(
-                        interval, GetDefaultRangeForInterval(interval));
+                    LoadCandles(interval, GetDefaultRangeForInterval(interval));
                   }
                 },
               ),
@@ -329,11 +344,14 @@ class _StockDetailPageState extends State<StockDetailPage> {
         Wrap(
           spacing: 6,
           children: <Widget>[
-            for (final CandleRange range
-                in GetRangesForInterval(selected_interval))
+            for (final CandleRange range in GetRangesForInterval(
+              selected_interval,
+            ))
               ChoiceChip(
-                label: Text(range.label,
-                    style: const TextStyle(fontSize: 11.5)),
+                label: Text(
+                  range.label,
+                  style: const TextStyle(fontSize: 11.5),
+                ),
                 selected: selected_range == range,
                 showCheckmark: false,
                 visualDensity: VisualDensity.compact,
@@ -390,8 +408,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
               ),
           ],
           candlestickPainter: DefaultCandlestickPainter(
-            candlestickStyleProvider:
-                (CandlestickSpot spot, int index) {
+            candlestickStyleProvider: (CandlestickSpot spot, int index) {
               final Color color = spot.close >= spot.open
                   ? profit_colors.gain_color
                   : profit_colors.loss_color;
@@ -428,10 +445,12 @@ class _StockDetailPageState extends State<StockDetailPage> {
           ),
           borderData: FlBorderData(show: false),
           titlesData: FlTitlesData(
-            topTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            leftTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -444,8 +463,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
                     padding: const EdgeInsets.only(left: 6),
                     child: Text(
                       value.toStringAsFixed(value >= 1000 ? 0 : 1),
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.grey),
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   );
                 },
@@ -465,9 +483,10 @@ class _StockDetailPageState extends State<StockDetailPage> {
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(
                       FormatCandleDateLabel(
-                          candles[index].date, selected_interval),
-                      style:
-                          const TextStyle(fontSize: 11, color: Colors.grey),
+                        candles[index].date,
+                        selected_interval,
+                      ),
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
                     ),
                   );
                 },
@@ -479,21 +498,27 @@ class _StockDetailPageState extends State<StockDetailPage> {
               maxContentWidth: 200,
               getTooltipColor: (CandlestickSpot spot) =>
                   Colors.black.withValues(alpha: 0.8),
-              getTooltipItems: (FlCandlestickPainter painter,
-                  CandlestickSpot spot, int index) {
-                final OhlcvCandle candle = candles[index];
-                return CandlestickTooltipItem(
-                  '${FormatFullDate(candle.date)}\n'
-                  '開 ${candle.open.toStringAsFixed(2)}  '
-                  '高 ${candle.high.toStringAsFixed(2)}\n'
-                  '低 ${candle.low.toStringAsFixed(2)}  '
-                  '收 ${candle.close.toStringAsFixed(2)}\n'
-                  '量 ${FormatCompactNumber(candle.volume)}',
-                  textStyle:
-                      const TextStyle(color: Colors.white, fontSize: 11.5),
-                  textAlign: TextAlign.left,
-                );
-              },
+              getTooltipItems:
+                  (
+                    FlCandlestickPainter painter,
+                    CandlestickSpot spot,
+                    int index,
+                  ) {
+                    final OhlcvCandle candle = candles[index];
+                    return CandlestickTooltipItem(
+                      '${FormatFullDate(candle.date)}\n'
+                      '開 ${candle.open.toStringAsFixed(2)}  '
+                      '高 ${candle.high.toStringAsFixed(2)}\n'
+                      '低 ${candle.low.toStringAsFixed(2)}  '
+                      '收 ${candle.close.toStringAsFixed(2)}\n'
+                      '量 ${FormatCompactNumber(candle.volume)}',
+                      textStyle: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                      ),
+                      textAlign: TextAlign.left,
+                    );
+                  },
             ),
           ),
         ),
@@ -528,10 +553,11 @@ class _StockDetailPageState extends State<StockDetailPage> {
                   BarChartRodData(
                     toY: candles[i].volume,
                     width: 3,
-                    color: (candles[i].is_bullish
-                            ? profit_colors.gain_color
-                            : profit_colors.loss_color)
-                        .withValues(alpha: 0.55),
+                    color:
+                        (candles[i].is_bullish
+                                ? profit_colors.gain_color
+                                : profit_colors.loss_color)
+                            .withValues(alpha: 0.55),
                     borderRadius: BorderRadius.zero,
                   ),
                 ],
@@ -541,12 +567,15 @@ class _StockDetailPageState extends State<StockDetailPage> {
           borderData: FlBorderData(show: false),
           barTouchData: BarTouchData(enabled: false),
           titlesData: FlTitlesData(
-            topTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            bottomTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            leftTitles:
-                const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            bottomTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            leftTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
             rightTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -561,8 +590,7 @@ class _StockDetailPageState extends State<StockDetailPage> {
                     padding: const EdgeInsets.only(left: 6),
                     child: Text(
                       FormatCompactNumber(value),
-                      style:
-                          const TextStyle(fontSize: 10, color: Colors.grey),
+                      style: const TextStyle(fontSize: 10, color: Colors.grey),
                     ),
                   );
                 },
@@ -577,22 +605,30 @@ class _StockDetailPageState extends State<StockDetailPage> {
   /// 基本資訊格：開高低收、52 週、市值、本益比。
   Widget _BuildQuoteInfoGrid(AppColors colors) {
     final StockQuote? quote = detail_quote;
+    final String currency = ResolveMarketForSymbol(widget.symbol).currency;
     final List<(String, String)> items = <(String, String)>[
-      ('今開', FormatPrice(quote?.open_price)),
-      ('今高', FormatPrice(quote?.day_high)),
-      ('今低', FormatPrice(quote?.day_low)),
-      ('昨收', FormatPrice(quote?.previous_close)),
-      ('成交量', quote?.volume != null
-          ? FormatCompactNumber(quote!.volume!)
-          : '—'),
-      ('52週高', FormatPrice(quote?.fifty_two_week_high)),
-      ('52週低', FormatPrice(quote?.fifty_two_week_low)),
-      ('市值', quote?.market_cap != null
-          ? FormatCompactNumber(quote!.market_cap!)
-          : '—'),
-      ('本益比', quote?.trailing_pe != null
-          ? quote!.trailing_pe!.toStringAsFixed(2)
-          : '—'),
+      ('今開', FormatPrice(quote?.open_price, currency)),
+      ('今高', FormatPrice(quote?.day_high, currency)),
+      ('今低', FormatPrice(quote?.day_low, currency)),
+      ('昨收', FormatPrice(quote?.previous_close, currency)),
+      (
+        '成交量',
+        quote?.volume != null ? FormatCompactNumber(quote!.volume!) : '—',
+      ),
+      ('52週高', FormatPrice(quote?.fifty_two_week_high, currency)),
+      ('52週低', FormatPrice(quote?.fifty_two_week_low, currency)),
+      (
+        '市值',
+        quote?.market_cap != null
+            ? FormatCompactNumber(quote!.market_cap!)
+            : '—',
+      ),
+      (
+        '本益比',
+        quote?.trailing_pe != null
+            ? quote!.trailing_pe!.toStringAsFixed(2)
+            : '—',
+      ),
     ];
 
     return Wrap(
@@ -605,15 +641,19 @@ class _StockDetailPageState extends State<StockDetailPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                Text(item.$1,
-                    style: TextStyle(
-                        fontSize: 12, color: colors.text_secondary)),
+                Text(
+                  item.$1,
+                  style: TextStyle(fontSize: 12, color: colors.text_secondary),
+                ),
                 const SizedBox(height: 3),
-                Text(item.$2,
-                    style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w600,
-                        color: colors.text_primary)),
+                Text(
+                  item.$2,
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.text_primary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -628,22 +668,27 @@ class _StockDetailPageState extends State<StockDetailPage> {
         .BuildHoldingDisplayRows()
         .where((HoldingDisplayRow r) => r.position.symbol == widget.symbol)
         .firstOrNull;
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
+    final String currency = ResolveMarketForSymbol(widget.symbol).currency;
     final Color pnl_color = widget.controller.profit_colors
         .ResolveColorForValue(display_row?.unrealized_pnl ?? 0);
 
     final List<(String, String, Color?)> items = <(String, String, Color?)>[
       ('持股', position.net_quantity.toStringAsFixed(5), null),
-      ('平均成本', money.format(position.average_cost), null),
-      ('市值', display_row != null ? money.format(display_row.market_value) : '—',
-          null),
+      ('平均成本', FormatMoney(position.average_cost, currency), null),
+      (
+        '市值',
+        display_row != null
+            ? FormatMoney(display_row.market_value, currency)
+            : '—',
+        null,
+      ),
       (
         '未實現損益',
         display_row != null
             ? '${display_row.unrealized_pnl >= 0 ? '+' : ''}'
-                '${money.format(display_row.unrealized_pnl)}'
-                '（${display_row.unrealized_pnl >= 0 ? '+' : ''}'
-                '${display_row.unrealized_pnl_percent.toStringAsFixed(2)}%）'
+                  '${FormatMoney(display_row.unrealized_pnl, currency)}'
+                  '（${display_row.unrealized_pnl >= 0 ? '+' : ''}'
+                  '${display_row.unrealized_pnl_percent.toStringAsFixed(2)}%）'
             : '—',
         pnl_color,
       ),
@@ -654,20 +699,21 @@ class _StockDetailPageState extends State<StockDetailPage> {
       children: <Widget>[
         Row(
           children: <Widget>[
-            Text('我的持倉',
-                style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: colors.text_primary)),
-            const SizedBox(width: 10),
-            Container(
-              width: 18,
-              height: 3,
-              color: const Color(0xFF4F6DF5),
+            Text(
+              '我的持倉',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: colors.text_primary,
+              ),
             ),
+            const SizedBox(width: 10),
+            Container(width: 18, height: 3, color: const Color(0xFF4F6DF5)),
             const SizedBox(width: 4),
-            Text('K 線上的藍線為你的平均成本',
-                style: TextStyle(fontSize: 11.5, color: colors.text_muted)),
+            Text(
+              'K 線上的藍線為你的平均成本',
+              style: TextStyle(fontSize: 11.5, color: colors.text_muted),
+            ),
           ],
         ),
         const SizedBox(height: 12),
@@ -681,15 +727,22 @@ class _StockDetailPageState extends State<StockDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Text(item.$1,
-                        style: TextStyle(
-                            fontSize: 12, color: colors.text_secondary)),
+                    Text(
+                      item.$1,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.text_secondary,
+                      ),
+                    ),
                     const SizedBox(height: 3),
-                    Text(item.$2,
-                        style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w600,
-                            color: item.$3 ?? colors.text_primary)),
+                    Text(
+                      item.$2,
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: item.$3 ?? colors.text_primary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -704,33 +757,42 @@ class _StockDetailPageState extends State<StockDetailPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text('相關新聞',
-            style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: colors.text_primary)),
+        Text(
+          '相關新聞',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: colors.text_primary,
+          ),
+        ),
         const SizedBox(height: 6),
         if (is_news_loading)
           const Padding(
             padding: EdgeInsets.all(16),
             child: Center(
-                child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
           )
         else if (news_items.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text('目前沒有相關新聞',
-                style: TextStyle(fontSize: 12.5, color: colors.text_muted)),
+            child: Text(
+              '目前沒有相關新聞',
+              style: TextStyle(fontSize: 12.5, color: colors.text_muted),
+            ),
           )
         else
           for (int i = 0; i < news_items.length; i++) ...<Widget>[
             if (i > 0) Divider(height: 1, color: colors.divider),
             InkWell(
-              onTap: () => launchUrl(Uri.parse(news_items[i].link),
-                  mode: LaunchMode.externalApplication),
+              onTap: () => launchUrl(
+                Uri.parse(news_items[i].link),
+                mode: LaunchMode.externalApplication,
+              ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Column(
@@ -741,19 +803,22 @@ class _StockDetailPageState extends State<StockDetailPage> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                          fontSize: 13.5,
-                          height: 1.4,
-                          fontWeight: FontWeight.w600,
-                          color: colors.text_primary),
+                        fontSize: 13.5,
+                        height: 1.4,
+                        fontWeight: FontWeight.w600,
+                        color: colors.text_primary,
+                      ),
                     ),
                     const SizedBox(height: 3),
                     Text(
                       news_items[i].published_at != null
                           ? '${news_items[i].publisher}・'
-                              '${FormatNewsTime(news_items[i].published_at!)}'
+                                '${FormatNewsTime(news_items[i].published_at!)}'
                           : news_items[i].publisher,
                       style: TextStyle(
-                          fontSize: 11.5, color: colors.text_muted),
+                        fontSize: 11.5,
+                        color: colors.text_muted,
+                      ),
                     ),
                   ],
                 ),
@@ -793,9 +858,9 @@ class _StockDetailPageState extends State<StockDetailPage> {
     );
   }
 
-  /// 價格欄位格式化（null 顯示 —）。
-  static String FormatPrice(double? value) {
-    return value != null ? '\$${value.toStringAsFixed(2)}' : '—';
+  /// 價格欄位格式化（null 顯示 —；依幣別加符號，台股為 NT$）。
+  static String FormatPrice(double? value, String currency) {
+    return value != null ? FormatMoney(value, currency) : '—';
   }
 
   /// 大數字縮寫（1.23M、45.6B）。

@@ -2,11 +2,11 @@
 // 未勾選任何指數 → 金額模式（市值＋成本）；勾選後 → 報酬率 % 比較模式。
 
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../../logic/portfolio_repository.dart';
 import '../../models/portfolio_snapshot.dart';
 import '../dashboard_controller.dart';
+import '../money_format.dart';
 import 'asset_curve_chart.dart';
 import 'return_comparison_chart.dart';
 
@@ -48,7 +48,10 @@ class AssetCurveSection extends StatelessWidget {
         if (comparison_mode)
           _BuildComparisonChart(visible)
         else
-          AssetCurveChart(history: visible),
+          AssetCurveChart(
+            history: visible,
+            currency: controller.display_currency_effective,
+          ),
         const SizedBox(height: 12),
         _BuildBenchmarkChipRow(),
       ],
@@ -83,7 +86,7 @@ class AssetCurveSection extends StatelessWidget {
     final double percent = controller.period_return_percent;
     final Color color = controller.profit_colors.ResolveColorForValue(pnl);
     final String sign = pnl >= 0 ? '+' : '';
-    final NumberFormat money = NumberFormat.currency(symbol: r'$');
+    final String currency = controller.display_currency_effective;
 
     // Wrap：手機窄度時 % 徽章與說明圖示自動換行，不會溢出
     return Wrap(
@@ -92,7 +95,7 @@ class AssetCurveSection extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: <Widget>[
         Text(
-          '期間損益　$sign${money.format(pnl)}',
+          '期間損益　$sign${FormatMoney(pnl, currency)}',
           style: TextStyle(
               fontSize: 16, fontWeight: FontWeight.w700, color: color),
         ),

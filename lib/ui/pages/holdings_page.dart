@@ -5,9 +5,11 @@ import 'dart:convert';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
+import '../../logic/market_registry.dart';
 import '../../models/holding_position.dart';
 import '../../services/csv_transaction_importer.dart';
 import '../dashboard_controller.dart';
+import '../money_format.dart';
 import '../widgets/holding_list_view.dart';
 import '../widgets/csv_import_preview_dialog.dart';
 import '../widgets/section_card.dart';
@@ -76,7 +78,7 @@ class HoldingsPage extends StatelessWidget {
                               const Spacer(),
                               Text(
                                 '已實現 ${position.realized_pnl >= 0 ? '+' : ''}'
-                                '\$${position.realized_pnl.toStringAsFixed(2)}',
+                                '${FormatMoney(position.realized_pnl, ResolveMarketForSymbol(position.symbol).currency)}',
                                 style: TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.w600,
