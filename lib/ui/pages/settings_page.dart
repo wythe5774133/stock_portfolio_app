@@ -213,7 +213,12 @@ class SettingsPage extends StatelessWidget {
     try {
       final XFile? file = await openFile(
         acceptedTypeGroups: <XTypeGroup>[
-          const XTypeGroup(label: 'JSON', extensions: <String>['json']),
+          // iOS 需以 UTI 宣告型別（只給 extensions 會直接拋例外）
+          const XTypeGroup(
+            label: 'JSON',
+            extensions: <String>['json'],
+            uniformTypeIdentifiers: <String>['public.json'],
+          ),
         ],
       );
       if (file == null) {

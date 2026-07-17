@@ -25,7 +25,12 @@ Future<bool> SaveBackupToDevice(String backup_json, String file_name) async {
   final FileSaveLocation? location = await getSaveLocation(
     suggestedName: file_name,
     acceptedTypeGroups: <XTypeGroup>[
-      const XTypeGroup(label: 'JSON', extensions: <String>['json']),
+      // iOS 需以 UTI 宣告型別（只給 extensions 會直接拋例外）
+      const XTypeGroup(
+        label: 'JSON',
+        extensions: <String>['json'],
+        uniformTypeIdentifiers: <String>['public.json'],
+      ),
     ],
   );
   if (location == null) {

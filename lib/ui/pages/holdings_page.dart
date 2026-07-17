@@ -116,7 +116,14 @@ class HoldingsPage extends StatelessWidget {
     try {
       final XFile? file = await openFile(
         acceptedTypeGroups: <XTypeGroup>[
-          const XTypeGroup(label: 'CSV', extensions: <String>['csv']),
+          // iOS 需以 UTI 宣告型別（只給 extensions 會直接拋例外）
+          const XTypeGroup(
+            label: 'CSV',
+            extensions: <String>['csv'],
+            uniformTypeIdentifiers: <String>[
+              'public.comma-separated-values-text',
+            ],
+          ),
         ],
       );
       if (file == null) {
