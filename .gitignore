@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# 本地協作開發日誌（不上傳）
+DEVLOG.md

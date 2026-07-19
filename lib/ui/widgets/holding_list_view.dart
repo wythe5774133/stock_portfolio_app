@@ -9,6 +9,7 @@ import '../money_format.dart';
 import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
+import 'change_percent_badge.dart';
 
 /*
  * @author  Toby
@@ -135,14 +136,10 @@ class HoldingListView extends StatelessWidget {
     );
     final List<Widget> cells = is_compact
         ? <Widget>[
-            Expanded(flex: 4, child: Text('代號／持股', style: header_style)),
+            Expanded(flex: 5, child: Text('代號／持股', style: header_style)),
             Expanded(
-                flex: 4,
-                child: Text('現價／今日', style: header_style,
-                    textAlign: TextAlign.right)),
-            Expanded(
-                flex: 4,
-                child: Text('未實現損益', style: header_style,
+                flex: 6,
+                child: Text('現價／今日／損益', style: header_style,
                     textAlign: TextAlign.right)),
           ]
         : <Widget>[
@@ -209,33 +206,38 @@ class _HoldingExpandableRow extends StatelessWidget {
     );
   }
 
-  /// 手機緊湊列：代號+持股 / 現價+今日漲跌 / 損益。
+  /// 手機緊湊列：左為代號+持股，右側垂直堆疊現價／當日漲跌色塊／未實現損益。
   Widget _BuildCompactTitle(BuildContext context) {
     final AppColors colors = AppColors.Of(context);
     final String currency = row.market.currency;
     final Color pnl_color =
         profit_colors.ResolveColorForValue(row.unrealized_pnl);
+    final Color day_change_color = row.day_change_percent != null
+        ? profit_colors.ResolveColorForValue(row.day_change_percent!)
+        : colors.text_muted;
     final String sign = row.unrealized_pnl >= 0 ? '+' : '';
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
         Expanded(
-          flex: 4,
+          flex: 5,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Text(row.position.symbol,
                   style: const TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700)),
+                      fontSize: 14.5, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 2),
               Text(
                 '${FormatQuantity(row.position.net_quantity)} 股',
-                style: TextStyle(fontSize: 11, color: colors.text_muted),
+                style: TextStyle(fontSize: 11.5, color: colors.text_muted),
               ),
             ],
           ),
         ),
         Expanded(
-          flex: 4,
+          flex: 6,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: <Widget>[
@@ -243,40 +245,23 @@ class _HoldingExpandableRow extends StatelessWidget {
                 row.current_price != null
                     ? FormatMoney(row.current_price!, currency)
                     : '—',
-                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
               ),
-              _BuildSingleLineText(
-                row.day_change_percent != null
-                    ? '${row.day_change_percent! >= 0 ? '+' : ''}'
-                        '${row.day_change_percent!.toStringAsFixed(2)}%'
-                    : row.price_source_label,
-                TextStyle(
-                  fontSize: 11,
-                  color: row.day_change_percent != null
-                      ? profit_colors
-                          .ResolveColorForValue(row.day_change_percent!)
-                      : colors.text_muted,
-                ),
+              const SizedBox(height: 3),
+              ChangePercentBadge(
+                percent: row.day_change_percent,
+                color: day_change_color,
               ),
-            ],
-          ),
-        ),
-        Expanded(
-          flex: 4,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: <Widget>[
+              const SizedBox(height: 3),
+              // 未實現損益一行呈現金額與百分比，色走 profit_colors（不用色塊）
               _BuildSingleLineText(
-                '$sign${FormatMoney(row.unrealized_pnl, currency)}',
+                '$sign${FormatMoney(row.unrealized_pnl, currency)} '
+                '($sign${row.unrealized_pnl_percent.toStringAsFixed(2)}%)',
                 TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
                   color: pnl_color,
                 ),
-              ),
-              _BuildSingleLineText(
-                '$sign${row.unrealized_pnl_percent.toStringAsFixed(2)}%',
-                TextStyle(fontSize: 11, color: pnl_color),
               ),
             ],
           ),

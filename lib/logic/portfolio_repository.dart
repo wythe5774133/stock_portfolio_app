@@ -342,6 +342,20 @@ class PortfolioRepository {
   }
 
   /*
+   *  @fn      Future<Map<String, Map<int, double>>> GetAllHistoricalCloses()
+   *
+   *  @brief   ( 讀取全部代號的日收盤價快取，供自選迷你走勢圖使用 )
+   *
+   *  @return  {symbol: {yyyyMMdd: 收盤}}；僅讀既有快取，不發網路請求
+   *
+   *  @note    走勢圖只吃既有快取（資產曲線／個股詳情頁抓過的日線），
+   *           不為 sparkline 另外同步，避免額外的 Yahoo 請求與限流風險。
+   */
+  Future<Map<String, Map<int, double>>> GetAllHistoricalCloses() {
+    return database.historicalPriceDao.GetAllHistoricalCloses();
+  }
+
+  /*
    *  @fn      Future<Map<String, double>> GetDividendIncomeBySymbol()
    *
    *  @brief   ( 取得各代號的累計股息收入：先同步配息事件再以除息日持股計算 )

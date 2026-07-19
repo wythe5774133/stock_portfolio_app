@@ -1,15 +1,18 @@
 // 自選股追蹤清單：分類 chips 過濾、現價與今日漲跌，
 // 點列進入個股詳情頁，選單可更改分類或移除。
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../database/app_database.dart' show WatchlistSymbol;
 import '../../logic/market_registry.dart';
+import '../../models/market_session.dart';
 import '../../models/stock_quote.dart';
 import '../dashboard_controller.dart';
 import '../money_format.dart';
 import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
+import 'change_percent_badge.dart';
 
 /*
  * @author  Toby
@@ -18,8 +21,8 @@ import '../theme/app_theme.dart';
  *
  * @class   WatchlistCard
  *
- * @brief   追蹤清單：頂部分類 chips（全部＋各分類），
- *          每列顯示代號/名稱、現價（不換行）、今日漲跌%，
+ * @brief   追蹤清單：頂部分類 chips（全部＋各分類），每列為富途式三段——
+ *          左段名稱/代號、中段迷你走勢圖、右段現價＋漲跌色塊（美股另附盤前/盤後），
  *          右側選單提供更改分類與移除。
  */
 class WatchlistCard extends StatelessWidget {
@@ -86,7 +89,7 @@ class WatchlistCard extends StatelessWidget {
     );
   }
 
-  /// 單一追蹤列。
+  /// 單一追蹤列：左段名稱/代號、中段迷你走勢圖、右段現價＋漲跌色塊。
   Widget _BuildWatchlistRow(BuildContext context, WatchlistSymbol entry,
       Map<String, StockQuote> quotes, AppColors colors) {
     final StockQuote? quote = quotes[entry.symbol];
@@ -103,27 +106,44 @@ class WatchlistCard extends StatelessWidget {
     final Color change_color = change_percent != null
         ? controller.profit_colors.ResolveColorForValue(change_percent)
         : colors.text_secondary;
+    final List<double> sparkline_closes =
+        controller.GetSparklineCloses(entry.symbol);
+    // 走勢圖線色以「當日漲跌方向」解析（無報價時退回中性色）
+    final Color sparkline_color = change_percent != null
+        ? change_color
+        : colors.text_muted;
+    final (String, double)? extended = _ResolveExtendedSessionChange(
+        quote, market, controller.SessionForMarket(market.market_id));
 
     return InkWell(
       onTap: () => StockDetailPage.Open(
           context, controller, entry.symbol, entry.name),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 8, 8),
+        padding: const EdgeInsets.fromLTRB(20, 11, 8, 11),
         child: Row(
           children: <Widget>[
-            // 代號與名稱
+            // 左段：名稱（粗體）＋代號／台股 badge（弱化）
             Expanded(
-              flex: 9,
+              flex: 10,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  Text(
+                    entry.name,
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                    style: const TextStyle(
+                        fontSize: 13.5, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 2),
                   Row(
                     children: <Widget>[
                       Flexible(
                         child: Text(entry.symbol,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 14.5, fontWeight: FontWeight.w700)),
+                            maxLines: 1,
+                            style: TextStyle(
+                                fontSize: 11.5, color: colors.text_muted)),
                       ),
                       // 台股加低調市場標籤；美股不加，避免雜訊
                       if (market.market_id == 'tw') ...<Widget>[
@@ -132,61 +152,42 @@ class WatchlistCard extends StatelessWidget {
                       ],
                     ],
                   ),
-                  Text(
-                    entry.name,
-                    overflow: TextOverflow.ellipsis,
-                    style:
-                        TextStyle(fontSize: 11.5, color: colors.text_muted),
-                  ),
                 ],
               ),
             ),
-            // 現價（單行不換行，過長自動縮字）
-            Expanded(
-              flex: 7,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: <Widget>[
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      price_and_label.$1 != null
-                          ? FormatMoney(price_and_label.$1!, market.currency)
-                          : '—',
-                      maxLines: 1,
-                      style: const TextStyle(
-                          fontSize: 14.5, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Text(
-                      price_and_label.$1 != null
-                          ? price_and_label.$2
-                          : '無報價',
-                      style: TextStyle(
-                          fontSize: 10.5, color: colors.text_muted)),
-                ],
-              ),
-            ),
-            // 今日漲跌 %
-            Expanded(
-              flex: 6,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: Text(
-                  change_percent != null
-                      ? '${change_percent >= 0 ? '+' : ''}'
-                          '${change_percent.toStringAsFixed(2)}%'
+            const SizedBox(width: 8),
+            // 中段：迷你走勢圖（無快取時同尺寸空白佔位）
+            _BuildSparkline(sparkline_closes, sparkline_color),
+            const SizedBox(width: 8),
+            // 右段：現價大字＋漲跌色塊＋（美股）盤前/盤後小字，右對齊堆疊
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  price_and_label.$1 != null
+                      ? FormatMoney(price_and_label.$1!, market.currency)
                       : '—',
                   maxLines: 1,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: change_color,
-                  ),
+                  style: const TextStyle(
+                      fontSize: 15, fontWeight: FontWeight.w700),
                 ),
-              ),
+                const SizedBox(height: 3),
+                ChangePercentBadge(
+                  percent: change_percent,
+                  color: change_color,
+                ),
+                if (extended != null) ...<Widget>[
+                  const SizedBox(height: 2),
+                  Text(
+                    '${extended.$1} '
+                    '${extended.$2 >= 0 ? '+' : ''}'
+                    '${extended.$2.toStringAsFixed(2)}%',
+                    style:
+                        TextStyle(fontSize: 10.5, color: colors.text_muted),
+                  ),
+                ],
+              ],
             ),
             // 更多選單：更改分類／移除
             PopupMenuButton<String>(
@@ -216,6 +217,112 @@ class WatchlistCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// 迷你走勢圖尺寸（富途式，寬 64 高 28）。
+  static const double SPARKLINE_WIDTH = 64;
+  static const double SPARKLINE_HEIGHT = 28;
+
+  /*
+   *  @fn      Widget _BuildSparkline(List<double> closes, Color color)
+   *
+   *  @brief   ( 用 fl_chart 極簡折線畫近 30 日收盤走勢，同色 10% 漸層填底 )
+   *
+   *  @param   closes - 由舊到新的收盤序列（少於兩點時視為無資料）
+   *  @param   color - 線色（由呼叫端依當日漲跌方向解析）
+   *
+   *  @return  固定尺寸走勢圖；無足夠資料回傳同尺寸空白佔位
+   *
+   *  @note    無軸線、無格線、無觸控；資料一律取自 historical 快取，不發網路請求。
+   */
+  Widget _BuildSparkline(List<double> closes, Color color) {
+    if (closes.length < 2) {
+      return const SizedBox(
+          width: SPARKLINE_WIDTH, height: SPARKLINE_HEIGHT);
+    }
+
+    double min_y = closes.first;
+    double max_y = closes.first;
+    for (final double value in closes) {
+      if (value < min_y) {
+        min_y = value;
+      }
+      if (value > max_y) {
+        max_y = value;
+      }
+    }
+    // 上下留白，避免折線貼齊邊界；全平序列給個最小範圍
+    final double span = (max_y - min_y).abs();
+    final double padding = span > 0 ? span * 0.15 : (max_y.abs() * 0.01 + 1);
+
+    final List<FlSpot> spots = <FlSpot>[
+      for (int i = 0; i < closes.length; i++)
+        FlSpot(i.toDouble(), closes[i]),
+    ];
+
+    return SizedBox(
+      width: SPARKLINE_WIDTH,
+      height: SPARKLINE_HEIGHT,
+      child: LineChart(
+        LineChartData(
+          minY: min_y - padding,
+          maxY: max_y + padding,
+          minX: 0,
+          maxX: (closes.length - 1).toDouble(),
+          lineTouchData: const LineTouchData(enabled: false),
+          gridData: const FlGridData(show: false),
+          titlesData: const FlTitlesData(show: false),
+          borderData: FlBorderData(show: false),
+          lineBarsData: <LineChartBarData>[
+            LineChartBarData(
+              spots: spots,
+              color: color,
+              barWidth: 1.6,
+              isCurved: false,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: color.withValues(alpha: 0.10),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /*
+   *  @fn      (String, double)? _ResolveExtendedSessionChange(StockQuote? quote, MarketInfo market, MarketSession session)
+   *
+   *  @brief   ( 算美股盤前/盤後價相對盤中價的漲跌%，供右段第三行小字 )
+   *
+   *  @param   quote - 該檔最新報價
+   *  @param   market - 市場資訊（台股永遠回 null）
+   *  @param   session - 該檔市場目前時段
+   *
+   *  @return  (「盤前」|「盤後」, 相對盤中價的百分比)；不適用時回 null
+   *
+   *  @note    盤前取 pre_price、盤後/收盤取 post_price，皆相對 regular_price；
+   *           缺盤中價或延長時段價時回 null。台股無盤前盤後，一律回 null。
+   */
+  (String, double)? _ResolveExtendedSessionChange(
+      StockQuote? quote, MarketInfo market, MarketSession session) {
+    if (quote == null ||
+        market.market_id == 'tw' ||
+        quote.regular_price == null ||
+        quote.regular_price == 0) {
+      return null;
+    }
+    final double regular = quote.regular_price!;
+    if (session == MarketSession.premarket && quote.pre_price != null) {
+      return ('盤前', (quote.pre_price! - regular) / regular * 100);
+    }
+    if ((session == MarketSession.postmarket ||
+            session == MarketSession.closed) &&
+        quote.post_price != null) {
+      return ('盤後', (quote.post_price! - regular) / regular * 100);
+    }
+    return null;
   }
 
   /// 市場標籤徽章：小字、subtle 底、圓角，低調不搶眼。

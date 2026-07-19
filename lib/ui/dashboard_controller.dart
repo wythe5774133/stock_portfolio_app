@@ -137,6 +137,13 @@ class DashboardController extends ChangeNotifier {
   List<WatchlistSymbol> watchlist = <WatchlistSymbol>[];
   String? selected_watchlist_group; // null = 顯示全部分類
 
+  // 迷你走勢圖資料：{symbol: 近 N 個交易日收盤價（由舊到新）}。
+  // 記憶體快取，避免每次 build 查 DB；只吃 historical_prices 既有快取，
+  // 不為 sparkline 發新網路請求（沒資料的代號回空清單、UI 顯示空白佔位）。
+  static const int SPARKLINE_MAX_POINTS = 30;
+  final Map<String, List<double>> _sparkline_closes_by_symbol =
+      <String, List<double>>{};
+
   // 資產曲線：時間範圍與大盤比較狀態
   CurveRange curve_range = CurveRange.all;
   final Set<String> selected_benchmarks = <String>{}; // 指數代號（^GSPC 等）
@@ -271,6 +278,10 @@ class DashboardController extends ChangeNotifier {
     await repository.StartBackgroundQuotePolling();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+    // 資產曲線同步過歷史日線後才載入走勢圖快取，此時持倉個股多半已有資料
+    await LoadSparklineCloses();
+    // 純自選（未持有）的代號沒有日線快取，低頻回填補齊走勢圖
+    await BackfillSparklineHistory();
   }
 
   /// Google 同步是否已登入。
@@ -451,6 +462,80 @@ class DashboardController extends ChangeNotifier {
   Future<void> ReloadWatchlist() async {
     watchlist = await repository.GetWatchlist();
     notifyListeners();
+  }
+
+  /*
+   *  @fn      Future<void> LoadSparklineCloses()
+   *
+   *  @brief   ( 一次讀入全部代號的日收盤快取到記憶體，供自選迷你走勢圖使用 )
+   *
+   *  @return  None（結果寫入 _sparkline_closes_by_symbol）
+   *
+   *  @note    僅讀既有快取、不發網路請求；每檔取最近 SPARKLINE_MAX_POINTS
+   *           個交易日（由舊到新）。資產曲線／個股詳情頁抓過日線後，
+   *           下次載入自然就有資料。
+   */
+  Future<void> LoadSparklineCloses() async {
+    final Map<String, Map<int, double>> all =
+        await repository.GetAllHistoricalCloses();
+    _sparkline_closes_by_symbol.clear();
+    for (final MapEntry<String, Map<int, double>> entry in all.entries) {
+      final List<int> dates = entry.value.keys.toList()..sort();
+      final List<int> recent = dates.length > SPARKLINE_MAX_POINTS
+          ? dates.sublist(dates.length - SPARKLINE_MAX_POINTS)
+          : dates;
+      _sparkline_closes_by_symbol[entry.key] = <double>[
+        for (final int date in recent) entry.value[date]!,
+      ];
+    }
+    notifyListeners();
+  }
+
+  /*
+   *  @fn      List<double> GetSparklineCloses(String symbol)
+   *
+   *  @brief   ( 取單一代號的迷你走勢圖收盤序列（由舊到新） )
+   *
+   *  @param   symbol - 股票代號
+   *
+   *  @return  近 SPARKLINE_MAX_POINTS 個交易日收盤價；無快取回空清單
+   *
+   *  @note    純記憶體查詢，供 build 期間直接呼叫；資料由 LoadSparklineCloses 填入。
+   */
+  List<double> GetSparklineCloses(String symbol) {
+    return _sparkline_closes_by_symbol[symbol] ?? const <double>[];
+  }
+
+  /*
+   *  @fn      Future<void> BackfillSparklineHistory()
+   *
+   *  @brief   ( 為缺少日線快取的追蹤代號回填近 60 天收盤，補齊迷你走勢圖 )
+   *
+   *  @return  None
+   *
+   *  @note    只處理走勢圖完全沒資料的代號（多為純自選、未持有者），
+   *           逐檔序列執行避免限流；每次 App 啟動最多跑一輪，
+   *           抓完重新載入走勢圖快取。失敗靜默（下次啟動再補）。
+   */
+  Future<void> BackfillSparklineHistory() async {
+    final DateTime from = DateTime.now().subtract(const Duration(days: 60));
+    final int from_date = from.year * 10000 + from.month * 100 + from.day;
+    final Set<String> tracked = <String>{
+      for (final WatchlistSymbol entry in watchlist) entry.symbol,
+      for (final HoldingPosition position in holdings) position.symbol,
+    };
+    final List<String> missing = <String>[
+      for (final String symbol in tracked)
+        if (GetSparklineCloses(symbol).isEmpty) symbol,
+    ];
+    if (missing.isEmpty) {
+      return;
+    }
+    for (final String symbol in missing) {
+      await repository.historical_price_service
+          .SyncHistoricalCloses(symbol, from_date);
+    }
+    await LoadSparklineCloses();
   }
 
   /// 加入自選追蹤並立即抓報價；回傳 false 表示已在清單中。

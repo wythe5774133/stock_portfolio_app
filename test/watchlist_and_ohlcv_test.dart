@@ -4,9 +4,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:stock_portfolio_app/database/app_database.dart';
 
 import 'test_database.dart';
+import 'package:stock_portfolio_app/logic/portfolio_repository.dart';
 import 'package:stock_portfolio_app/models/ohlcv_candle.dart';
 import 'package:stock_portfolio_app/services/historical_price_service.dart';
 import 'package:stock_portfolio_app/services/market_session_resolver.dart';
+import 'package:stock_portfolio_app/ui/dashboard_controller.dart';
 
 void main() {
   setUpAll(MarketSessionResolver.InitializeTimeZoneDatabase);
@@ -45,6 +47,51 @@ void main() {
           await database.watchlistDao.GetAllSymbols();
       expect(list.map((WatchlistSymbol w) => w.symbol).toList(),
           <String>['A', 'B']);
+    });
+  });
+
+  group('GetSparklineCloses', () {
+    late AppDatabase database;
+    late PortfolioRepository repository;
+    late DashboardController controller;
+
+    setUp(() {
+      database = CreateTestDatabase();
+      repository = PortfolioRepository(database: database);
+      controller = DashboardController(repository: repository);
+    });
+
+    tearDown(() async {
+      repository.quote_scheduler.Stop();
+      controller.dispose();
+      await database.close();
+    });
+
+    test('從快取取近 30 筆收盤（由舊到新），超量截尾', () async {
+      // 塞 40 個交易日：日期 20260101..20260209（用連號簡化，收盤值等於序號）
+      final Map<int, double> closes = <int, double>{
+        for (int i = 0; i < 40; i++) 20260101 + i: (i + 1).toDouble(),
+      };
+      await database.historicalPriceDao.SaveHistoricalCloses('NVDA', closes);
+
+      await controller.LoadSparklineCloses();
+      final List<double> series = controller.GetSparklineCloses('NVDA');
+
+      // 只保留最近 30 筆（第 11..40，值為 11..40），且由舊到新
+      expect(series.length, 30);
+      expect(series.first, 11.0);
+      expect(series.last, 40.0);
+    });
+
+    test('筆數不足 30 時全數回傳；無快取回空清單', () async {
+      await database.historicalPriceDao.SaveHistoricalCloses('AAPL',
+          <int, double>{20260101: 100.0, 20260102: 101.0, 20260103: 99.5});
+
+      await controller.LoadSparklineCloses();
+
+      expect(controller.GetSparklineCloses('AAPL'),
+          <double>[100.0, 101.0, 99.5]);
+      expect(controller.GetSparklineCloses('MSFT'), isEmpty);
     });
   });
 

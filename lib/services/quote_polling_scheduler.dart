@@ -136,10 +136,14 @@ class QuotePollingScheduler extends ChangeNotifier {
     current_session = session_resolver.ResolveCurrentMarketSession();
     final List<String> symbols = await ProvideTrackedSymbols();
     final MarketSession aggregate_session = ResolveAggregateSession(symbols);
-    if (aggregate_session != MarketSession.closed) {
+    // 休市時原則上不發請求，但若有代號完全沒有快取報價（全新安裝、
+    // 假日匯入備份等），仍抓一次補上最後收盤價，避免整片「—」。
+    final bool has_uncached_symbol =
+        symbols.any((String s) => !latest_quotes.containsKey(s));
+    if (aggregate_session != MarketSession.closed || has_uncached_symbol) {
       await PollQuotesNow();
     } else {
-      notifyListeners(); // 全市場休市：只更新時段顯示，不發請求
+      notifyListeners(); // 全市場休市且快取齊全：只更新時段顯示，不發請求
     }
 
     if (!_is_running) {
