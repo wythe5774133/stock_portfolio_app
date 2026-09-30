@@ -6,15 +6,18 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../logic/market_registry.dart';
+import '../models/earnings_event.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/ohlcv_candle.dart';
 import '../models/stock_news_item.dart';
 import '../models/stock_quote.dart';
+import '../services/earnings_calendar_service.dart';
 import 'dashboard_controller.dart';
 import 'money_format.dart';
 import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
+import 'widgets/earnings_calendar_card.dart';
 
 /*
  * @author  Toby
@@ -235,7 +238,16 @@ class _StockDetailPageState extends State<StockDetailPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                _BuildCard(colors, child: _BuildQuoteInfoGrid(colors)),
+                _BuildCard(
+                  colors,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      ?_BuildNextEarningsRow(colors),
+                      _BuildQuoteInfoGrid(colors),
+                    ],
+                  ),
+                ),
                 if (FindHoldingPosition() != null) ...<Widget>[
                   const SizedBox(height: 16),
                   _BuildCard(colors, child: _BuildHoldingSummary(colors)),
@@ -598,6 +610,50 @@ class _StockDetailPageState extends State<StockDetailPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 下次財報列（含下方間距）：事件名稱、時間與倒數；沒有資料回傳 null。
+  Widget? _BuildNextEarningsRow(AppColors colors) {
+    final EarningsEvent? event =
+        widget.controller.GetNextEarningsEvent(widget.symbol);
+    if (event == null) {
+      return null;
+    }
+    final int days = EarningsCalendarService.CalculateDaysUntil(
+      event,
+      widget.controller.GetTodayTaipeiDate(),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  event.is_deadline ? '下次公布期限' : '下次財報',
+                  style: TextStyle(fontSize: 12, color: colors.text_secondary),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${event.label}　'
+                  '${EarningsCalendarService.FormatEventWhenText(event)}',
+                  style: TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w600,
+                    color: colors.text_primary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          EarningsCountdownChip(days: days),
+        ],
       ),
     );
   }

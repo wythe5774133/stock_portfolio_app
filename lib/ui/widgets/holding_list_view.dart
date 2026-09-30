@@ -10,6 +10,7 @@ import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
 import '../theme/profit_color_scheme.dart';
 import 'change_percent_badge.dart';
+import 'earnings_calendar_card.dart';
 
 /*
  * @author  Toby
@@ -225,9 +226,9 @@ class _HoldingExpandableRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              Text(row.position.symbol,
-                  style: const TextStyle(
-                      fontSize: 14.5, fontWeight: FontWeight.w700)),
+              _BuildSymbolWithBadge(
+                const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 2),
               Text(
                 '${FormatQuantity(row.position.net_quantity)} 股',
@@ -270,6 +271,27 @@ class _HoldingExpandableRow extends StatelessWidget {
     );
   }
 
+  /// 代號＋（7 天內有財報時）財報倒數標籤。
+  Widget _BuildSymbolWithBadge(TextStyle style) {
+    final Widget? badge = BuildEarningsBadge(controller, row.position.symbol);
+    return Row(
+      children: <Widget>[
+        Flexible(
+          child: Text(
+            row.position.symbol,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: style,
+          ),
+        ),
+        if (badge != null) ...<Widget>[
+          const SizedBox(width: 6),
+          badge,
+        ],
+      ],
+    );
+  }
+
   /// 單行文字：過長時等比例縮小而非換行（手機數字防跑版）。
   static Widget _BuildSingleLineText(String text, TextStyle style) {
     return FittedBox(
@@ -290,9 +312,8 @@ class _HoldingExpandableRow extends StatelessWidget {
       children: <Widget>[
         Expanded(
           flex: 3,
-          child: Text(
-            row.position.symbol,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+          child: _BuildSymbolWithBadge(
+            const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
           ),
         ),
         Expanded(

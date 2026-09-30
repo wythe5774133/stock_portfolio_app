@@ -7,6 +7,7 @@ import '../database/app_database.dart' show WatchlistSymbol;
 import '../logic/market_registry.dart';
 import '../logic/portfolio_calculator.dart';
 import '../logic/portfolio_repository.dart';
+import '../models/earnings_event.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/portfolio_snapshot.dart';
@@ -18,6 +19,8 @@ import '../services/app_settings_store.dart';
 import '../services/backup_service.dart';
 import '../services/google_drive_sync_service.dart';
 import '../services/csv_transaction_importer.dart';
+import '../services/earnings_calendar_service.dart';
+import '../services/market_session_resolver.dart';
 import 'theme/app_theme.dart';
 import 'theme/profit_color_scheme.dart';
 
@@ -102,6 +105,12 @@ class DashboardController extends ChangeNotifier {
   static const String SETTING_KEY_DIVIDEND_TRACKING = 'dividend_tracking';
   static const String SETTING_KEY_LAST_DRIVE_SYNC = 'last_drive_sync_at';
   static const String SETTING_KEY_DISPLAY_CURRENCY = 'display_currency';
+  static const String SETTING_KEY_EARNINGS_CACHE = 'earnings_cache';
+
+  static const Duration EARNINGS_REFRESH_INTERVAL = Duration(hours: 12);
+  static const int EARNINGS_HORIZON_DAYS = 14; // 總覽「近期財報」涵蓋天數
+  static const int EARNINGS_BADGE_DAYS = 7; // 列表財報標籤的顯示天數
+  static const int EARNINGS_EXPORT_DAYS = 90; // 匯出行事曆涵蓋天數
 
   /// 支援的顯示幣別。
   static const String CURRENCY_USD = 'USD';
@@ -132,6 +141,9 @@ class DashboardController extends ChangeNotifier {
   // Google Drive 同步狀態
   bool is_drive_syncing = false;
   DateTime? last_drive_sync_at;
+
+  // 美股財報日期快取 {symbol: 下次財報}；台股法定期限即時計算不快取
+  Map<String, EarningsEvent> us_earnings_by_symbol = <String, EarningsEvent>{};
 
   // 自選股追蹤清單
   List<WatchlistSymbol> watchlist = <WatchlistSymbol>[];
@@ -278,6 +290,7 @@ class DashboardController extends ChangeNotifier {
     await repository.StartBackgroundQuotePolling();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+    await RefreshEarningsCalendar();
     // 資產曲線同步過歷史日線後才載入走勢圖快取，此時持倉個股多半已有資料
     await LoadSparklineCloses();
     // 純自選（未持有）的代號沒有日線快取，低頻回填補齊走勢圖
@@ -411,6 +424,7 @@ class DashboardController extends ChangeNotifier {
     await repository.quote_scheduler.PollQuotesNow();
     await ReloadPortfolioHistory();
     await RefreshDividendsAndXirr();
+    await RefreshEarningsCalendar();
     return summary;
   }
 
@@ -454,6 +468,7 @@ class DashboardController extends ChangeNotifier {
       await repository.quote_scheduler.PollQuotesNow();
       await ReloadPortfolioHistory();
       await RefreshDividendsAndXirr();
+      await RefreshEarningsCalendar();
     }
     return inserted;
   }
@@ -552,6 +567,7 @@ class DashboardController extends ChangeNotifier {
     if (added) {
       await ReloadWatchlist();
       await repository.quote_scheduler.PollQuotesNow();
+      await RefreshEarningsCalendar();
     }
     return added;
   }
@@ -598,6 +614,7 @@ class DashboardController extends ChangeNotifier {
   /// 匯出備份 JSON（交易＋追蹤清單＋設定）。
   Future<String> ExportBackupJson() async {
     final Map<String, dynamic> settings = await settings_store.LoadSettings();
+    settings.remove(SETTING_KEY_EARNINGS_CACHE); // 財報快取可重抓，不進備份
     return repository.backup_service.BuildBackupJson(settings);
   }
 
@@ -988,6 +1005,137 @@ class DashboardController extends ChangeNotifier {
       return (quote.regular_price, '盤中');
     }
     return (null, '均價');
+  }
+
+  /// 需要列出財報事件的代號：持有中的個股 ∪ 自選追蹤清單。
+  List<String> GetEarningsTrackedSymbols() {
+    final Set<String> symbols = <String>{
+      for (final HoldingPosition position in holdings)
+        if (!position.is_closed) position.symbol,
+      for (final WatchlistSymbol entry in watchlist) entry.symbol,
+    };
+    return symbols.toList()..sort();
+  }
+
+  /// 今天的台北日期 yyyyMMdd（財報天數以台灣時間計算）。
+  int GetTodayTaipeiDate() {
+    return EarningsCalendarService.ConvertDateTimeToYyyymmdd(
+      MarketSessionResolver.ConvertToTaipeiTime(DateTime.now()),
+    );
+  }
+
+  /*
+   *  @fn      Future<void> RefreshEarningsCalendar({bool force_refresh})
+   *
+   *  @brief   ( 載入美股財報日期快取，過期或有新代號時向 Yahoo 重抓 )
+   *
+   *  @param   force_refresh - true 時不看快取時間直接重抓
+   *
+   *  @return  None（結果寫入 us_earnings_by_symbol）
+   *
+   *  @note    快取存在設定檔的 SETTING_KEY_EARNINGS_CACHE，
+   *           EARNINGS_REFRESH_INTERVAL 內且代號沒有增加時不發請求；
+   *           抓取失敗沿用快取。
+   */
+  Future<void> RefreshEarningsCalendar({bool force_refresh = false}) async {
+    final List<String> us_symbols = GetEarningsTrackedSymbols()
+        .where(EarningsCalendarService.IsUsEarningsSymbol)
+        .toList();
+
+    final Map<String, dynamic> settings = await settings_store.LoadSettings();
+    final Object? cache = settings[SETTING_KEY_EARNINGS_CACHE];
+    DateTime? fetched_at;
+    final Set<String> cached_symbols = <String>{};
+    final Map<String, EarningsEvent> cached_events = <String, EarningsEvent>{};
+    if (cache is Map<String, dynamic>) {
+      final Object? fetched_ms = cache['fetched_at'];
+      if (fetched_ms is int) {
+        fetched_at = DateTime.fromMillisecondsSinceEpoch(fetched_ms);
+      }
+      final Object? symbols = cache['symbols'];
+      if (symbols is List<dynamic>) {
+        cached_symbols.addAll(symbols.whereType<String>());
+      }
+      final Object? events = cache['events'];
+      if (events is List<dynamic>) {
+        for (final Map<String, dynamic> raw
+            in events.whereType<Map<String, dynamic>>()) {
+          final EarningsEvent? event = EarningsEvent.FromJson(raw);
+          if (event != null) {
+            cached_events[event.symbol] = event;
+          }
+        }
+      }
+    }
+    us_earnings_by_symbol = cached_events;
+    notifyListeners();
+
+    final bool is_fresh = fetched_at != null &&
+        DateTime.now().difference(fetched_at) < EARNINGS_REFRESH_INTERVAL;
+    final bool has_new_symbols =
+        us_symbols.any((String s) => !cached_symbols.contains(s));
+    if (us_symbols.isEmpty ||
+        (!force_refresh && is_fresh && !has_new_symbols)) {
+      return;
+    }
+
+    final Map<String, EarningsEvent>? fetched =
+        await repository.FetchUsEarningsEvents(us_symbols);
+    if (fetched == null) {
+      return;
+    }
+    us_earnings_by_symbol = fetched;
+    await settings_store.SaveSetting(SETTING_KEY_EARNINGS_CACHE, <String, dynamic>{
+      'fetched_at': DateTime.now().millisecondsSinceEpoch,
+      'symbols': us_symbols,
+      'events': <Map<String, dynamic>>[
+        for (final EarningsEvent event in fetched.values) event.ToJson(),
+      ],
+    });
+    notifyListeners();
+  }
+
+  /// 追蹤代號在未來 days 天內的財報事件（含台股法定期限），依時間排序。
+  List<EarningsEvent> GetUpcomingEarningsEvents({
+    int days = EARNINGS_HORIZON_DAYS,
+  }) {
+    return EarningsCalendarService.SelectUpcomingEvents(
+      GetEarningsTrackedSymbols(),
+      us_earnings_by_symbol,
+      GetTodayTaipeiDate(),
+      days,
+    );
+  }
+
+  /// 單一代號的下一個財報事件（個股詳情用）；沒有資料回傳 null。
+  EarningsEvent? GetNextEarningsEvent(String symbol) {
+    return EarningsCalendarService.FindNextEventForSymbol(
+      symbol,
+      us_earnings_by_symbol,
+      GetTodayTaipeiDate(),
+    );
+  }
+
+  /// 列表標籤用：EARNINGS_BADGE_DAYS 內的財報（不含台股月營收）；無則 null。
+  EarningsEvent? GetEarningsBadgeEvent(String symbol) {
+    final EarningsEvent? event = GetNextEarningsEvent(symbol);
+    if (event == null ||
+        event.kind == EarningsEventKind.tw_monthly_revenue) {
+      return null;
+    }
+    final int days = EarningsCalendarService.CalculateDaysUntil(
+      event,
+      GetTodayTaipeiDate(),
+    );
+    return days <= EARNINGS_BADGE_DAYS ? event : null;
+  }
+
+  /// 匯出 EARNINGS_EXPORT_DAYS 天內全部財報事件的 .ics 內容。
+  String BuildEarningsCalendarIcs() {
+    return EarningsCalendarService.BuildEarningsIcs(
+      GetUpcomingEarningsEvents(days: EARNINGS_EXPORT_DAYS),
+      DateTime.now(),
+    );
   }
 
   /// 報價更新推播轉發給 UI。

@@ -39,3 +39,33 @@ Future<bool> SaveBackupToDevice(String backup_json, String file_name) async {
   await File(location.path).writeAsString(backup_json);
   return true;
 }
+
+/// 儲存 .ics 行事曆檔：手機開分享面板（可直接加入行事曆）、桌面開存檔對話框。
+Future<bool> SaveCalendarToDevice(String ics_content, String file_name) async {
+  if (Platform.isIOS || Platform.isAndroid) {
+    final Directory temp_dir = await getTemporaryDirectory();
+    final File temp_file = File(p.join(temp_dir.path, file_name));
+    await temp_file.writeAsString(ics_content);
+    await SharePlus.instance.share(ShareParams(
+      files: <XFile>[XFile(temp_file.path, mimeType: 'text/calendar')],
+      subject: '財報行事曆',
+    ));
+    return true;
+  }
+
+  final FileSaveLocation? location = await getSaveLocation(
+    suggestedName: file_name,
+    acceptedTypeGroups: <XTypeGroup>[
+      const XTypeGroup(
+        label: 'iCalendar',
+        extensions: <String>['ics'],
+        uniformTypeIdentifiers: <String>['com.apple.ical.ics'],
+      ),
+    ],
+  );
+  if (location == null) {
+    return false; // 使用者取消
+  }
+  await File(location.path).writeAsString(ics_content);
+  return true;
+}

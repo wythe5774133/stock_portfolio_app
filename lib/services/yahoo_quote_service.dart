@@ -32,6 +32,8 @@ class YahooQuoteService {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/126.0 Safari/537.36';
   static const Duration REQUEST_TIMEOUT = Duration(seconds: 10);
+  static const String EARNINGS_FIELDS = 'symbol,earningsTimestamp,'
+      'earningsTimestampStart,earningsTimestampEnd,isEarningsDateEstimate';
   static const List<String> QUERY_HOSTS = <String>[
     'query1.finance.yahoo.com',
     'query2.finance.yahoo.com',
@@ -103,14 +105,67 @@ class YahooQuoteService {
   /// 主路徑：v7/finance/quote 批量查詢（需 cookie + crumb）。
   Future<Map<String, StockQuote>> _FetchQuotesViaV7(
       List<String> symbols) async {
+    final List<Map<String, dynamic>>? results =
+        await _FetchV7ResultJson(symbols);
+    if (results == null) {
+      return <String, StockQuote>{};
+    }
+    final DateTime fetched_at = DateTime.now();
+    final Map<String, StockQuote> quotes = <String, StockQuote>{};
+    for (final Map<String, dynamic> raw in results) {
+      final StockQuote quote = ParseV7QuoteJson(raw, fetched_at);
+      quotes[quote.symbol] = quote;
+    }
+    return quotes;
+  }
+
+  /*
+   *  @fn      Future<List<Map<String, dynamic>>?> FetchEarningsQuoteResults(List<String> symbols)
+   *
+   *  @brief   ( 取得含財報日期欄位的 v7 報價原始 JSON，供財報行事曆解析 )
+   *
+   *  @param   symbols - 股票代號清單
+   *
+   *  @return  quoteResponse.result[] 各元素；失敗或退避期間回傳 null
+   *
+   *  @note    原生平台直接呼叫 v7；網頁版走 Worker 的 /earnings 端點
+   *           （回應格式與 v7 相同）。絕不向外拋例外，也不影響報價退避狀態。
+   */
+  Future<List<Map<String, dynamic>>?> FetchEarningsQuoteResults(
+      List<String> symbols) async {
+    if (symbols.isEmpty || is_backing_off) {
+      return null;
+    }
+    try {
+      if (kIsWeb) {
+        final http.Response response = await http_client
+            .get(BuildEarningsProxyUri(symbols))
+            .timeout(REQUEST_TIMEOUT);
+        if (response.statusCode != 200) {
+          return null;
+        }
+        return ParseV7ResultList(
+            jsonDecode(response.body) as Map<String, dynamic>);
+      }
+      return await _FetchV7ResultJson(symbols,
+          extra_params: <String, String>{'fields': EARNINGS_FIELDS});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 呼叫 v7/finance/quote 並回傳 result 陣列；crumb 取得失敗或非 200 回傳 null。
+  Future<List<Map<String, dynamic>>?> _FetchV7ResultJson(List<String> symbols,
+      {Map<String, String> extra_params = const <String, String>{}}) async {
     await _EnsureCookieAndCrumb();
     if (_crumb == null) {
-      return <String, StockQuote>{};
+      return null;
     }
 
     final Uri uri = BuildYahooUri('query1.finance.yahoo.com',
         '/v7/finance/quote', <String, String>{
       'symbols': symbols.join(','),
+      ...extra_params,
       'crumb': _crumb!,
     });
     final http.Response response = await http_client.get(uri,
@@ -120,27 +175,25 @@ class YahooQuoteService {
       // cookie/crumb 失效，清掉讓下一輪重取
       _cookie_header = null;
       _crumb = null;
-      return <String, StockQuote>{};
+      return null;
     }
     if (response.statusCode != 200) {
-      return <String, StockQuote>{};
+      return null;
     }
+    return ParseV7ResultList(jsonDecode(response.body) as Map<String, dynamic>);
+  }
 
-    final Map<String, dynamic> body =
-        jsonDecode(response.body) as Map<String, dynamic>;
+  /// 從 v7 回應取出 quoteResponse.result[]（缺欄位回傳空清單）。
+  static List<Map<String, dynamic>> ParseV7ResultList(
+      Map<String, dynamic> body) {
     final List<dynamic> results =
         ((body['quoteResponse'] as Map<String, dynamic>?)?['result']
                 as List<dynamic>?) ??
             <dynamic>[];
-
-    final DateTime fetched_at = DateTime.now();
-    final Map<String, StockQuote> quotes = <String, StockQuote>{};
-    for (final dynamic raw in results) {
-      final StockQuote quote =
-          ParseV7QuoteJson(raw as Map<String, dynamic>, fetched_at);
-      quotes[quote.symbol] = quote;
-    }
-    return quotes;
+    return <Map<String, dynamic>>[
+      for (final dynamic raw in results)
+        if (raw is Map<String, dynamic>) raw,
+    ];
   }
 
   /// 備援路徑：v8/finance/chart 逐檔查詢，query1 被限流時改用 query2。

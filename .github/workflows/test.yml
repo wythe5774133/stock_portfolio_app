@@ -1,0 +1,25 @@
+# 測試流程：PR 與推送到 master 時執行靜態分析與全部單元／widget 測試。
+
+name: test
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SQLite (drift 記憶體資料庫測試用)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: dart run build_runner build --delete-conflicting-outputs
+      - run: flutter analyze
+      - run: flutter test
