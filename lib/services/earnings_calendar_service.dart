@@ -381,7 +381,7 @@ class EarningsCalendarService {
       final String hh = taipei.hour.toString().padLeft(2, '0');
       final String mm = taipei.minute.toString().padLeft(2, '0');
       return '台灣時間 '
-          '${FormatMonthDayWithWeekday(ConvertDateTimeToYyyymmdd(taipei))} '
+          '${FormatMonthDayWithWeekday(ConvertDateTimeToYyyymmdd(taipei))}'
           '$hh:$mm・${FormatTimingText(event.timing)}';
     }
     if (event.end_date != null) {
