@@ -19,6 +19,12 @@ Uri BuildYahooUri(String host, String path, Map<String, String> params) {
   return Uri.https(host, path, params);
 }
 
+/// 網頁版財報日期端點：由 Worker 代為取得 cookie＋crumb 後查詢 v7 報價。
+Uri BuildEarningsProxyUri(List<String> symbols) {
+  return Uri.parse('$WEB_PROXY_BASE/earnings')
+      .replace(queryParameters: <String, String>{'symbols': symbols.join(',')});
+}
+
 /// 請求標頭：瀏覽器禁止自訂 User-Agent（會自帶），原生平台才需要。
 Map<String, String> BuildYahooHeaders(String user_agent,
     {String? cookie_header}) {

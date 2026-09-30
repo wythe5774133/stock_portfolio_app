@@ -13,6 +13,7 @@ import '../money_format.dart';
 import '../stock_detail_page.dart';
 import '../theme/app_theme.dart';
 import 'change_percent_badge.dart';
+import 'earnings_calendar_card.dart';
 
 /*
  * @author  Toby
@@ -150,6 +151,7 @@ class WatchlistCard extends StatelessWidget {
                         const SizedBox(width: 6),
                         _BuildMarketBadge(market.market_label, colors),
                       ],
+                      ?_BuildSpacedEarningsBadge(entry.symbol),
                     ],
                   ),
                 ],
@@ -323,6 +325,15 @@ class WatchlistCard extends StatelessWidget {
       return ('盤後', (quote.post_price! - regular) / regular * 100);
     }
     return null;
+  }
+
+  /// 7 天內有財報時回傳「間距＋倒數標籤」，否則 null。
+  Widget? _BuildSpacedEarningsBadge(String symbol) {
+    final Widget? badge = BuildEarningsBadge(controller, symbol);
+    if (badge == null) {
+      return null;
+    }
+    return Padding(padding: const EdgeInsets.only(left: 6), child: badge);
   }
 
   /// 市場標籤徽章：小字、subtle 底、圓角，低調不搶眼。

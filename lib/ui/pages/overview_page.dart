@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../dashboard_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/asset_curve_section.dart';
+import '../widgets/earnings_calendar_card.dart';
 import '../widgets/holding_pie_chart.dart';
 import '../widgets/quote_status_banner.dart';
 import '../widgets/portfolio_risk_card.dart';
@@ -43,6 +44,7 @@ class OverviewPage extends StatelessWidget {
                 last_updated_at: controller.last_updated_at,
                 is_quote_unavailable: controller.is_quote_unavailable,
               ),
+              EarningsReminderBanner(controller: controller),
               const SizedBox(height: 14),
               _BuildCurrencySwitcher(context),
               const SizedBox(height: 12),
@@ -61,6 +63,10 @@ class OverviewPage extends StatelessWidget {
                 display_currency: display_currency,
                 profit_colors: controller.profit_colors,
               ),
+              if (controller.GetEarningsTrackedSymbols().isNotEmpty) ...<Widget>[
+                const SizedBox(height: 14),
+                EarningsCalendarCard(controller: controller),
+              ],
               const SizedBox(height: 14),
               SectionCard(
                 title: '資產曲線',

@@ -73,6 +73,18 @@ class MarketSessionResolver {
     return MarketSession.closed;
   }
 
+  /// 將任意時間點轉為美東時間（America/New_York）。
+  static tz.TZDateTime ConvertToNewYorkTime(DateTime moment) {
+    InitializeTimeZoneDatabase();
+    return tz.TZDateTime.from(moment.toUtc(), _new_york);
+  }
+
+  /// 將任意時間點轉為台北時間（Asia/Taipei）。
+  static tz.TZDateTime ConvertToTaipeiTime(DateTime moment) {
+    InitializeTimeZoneDatabase();
+    return tz.TZDateTime.from(moment.toUtc(), _taipei);
+  }
+
   /// 判斷「現在」屬於哪個美股交易時段。
   MarketSession ResolveCurrentMarketSession() {
     return ResolveMarketSessionAt(DateTime.now());

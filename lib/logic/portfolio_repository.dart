@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../database/app_database.dart';
 import '../database/tombstone_dao.dart';
+import '../models/earnings_event.dart';
 import '../models/holding_position.dart';
 import '../models/market_session.dart';
 import '../models/portfolio_snapshot.dart';
@@ -16,6 +17,7 @@ import '../models/symbol_search_result.dart';
 import '../services/backup_service.dart';
 import '../services/csv_transaction_importer.dart';
 import '../services/dividend_service.dart';
+import '../services/earnings_calendar_service.dart';
 import '../services/google_drive_sync_service.dart';
 import '../services/historical_price_service.dart';
 import '../services/market_session_resolver.dart';
@@ -53,6 +55,7 @@ class PortfolioRepository {
   final HistoricalPriceService historical_price_service;
   final StockSymbolSearchService symbol_search_service;
   final DividendService dividend_service;
+  late final EarningsCalendarService earnings_service;
   late final BackupService backup_service;
   late final GoogleDriveSyncService drive_sync_service;
   late final QuotePollingScheduler quote_scheduler;
@@ -77,6 +80,7 @@ class PortfolioRepository {
         historical_price_dao: database.historicalPriceDao,
         http_client: http_client,
       ) {
+    earnings_service = EarningsCalendarService(quote_service: quote_service);
     backup_service = BackupService(database: database);
     drive_sync_service = GoogleDriveSyncService(backup_service: backup_service);
     quote_scheduler = QuotePollingScheduler(
@@ -295,6 +299,13 @@ class PortfolioRepository {
       );
     }
     return deleted;
+  }
+
+  /// 抓取美股代號的下次財報日期；請求失敗回傳 null（呼叫端沿用快取）。
+  Future<Map<String, EarningsEvent>?> FetchUsEarningsEvents(
+    List<String> symbols,
+  ) {
+    return earnings_service.FetchUsEarningsEvents(symbols, DateTime.now());
   }
 
   /// 以關鍵字搜尋股票代號（手動記帳的自動完成）。
