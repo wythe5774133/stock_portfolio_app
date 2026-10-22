@@ -1,11 +1,11 @@
-# 測試流程：PR 與推送到 master 時執行靜態分析與全部單元／widget 測試。
+# 測試流程：PR 時執行靜態分析、全部單元／widget 測試與網頁版建置檢查。
+# 推送到 master 時由 deploy.yml 呼叫本流程，通過後才部署。
 
 name: test
 
 on:
   pull_request:
-  push:
-    branches: [master]
+  workflow_call: {}
 
 jobs:
   analyze-and-test:
@@ -23,3 +23,5 @@ jobs:
       - run: dart run build_runner build --delete-conflicting-outputs
       - run: flutter analyze
       - run: flutter test
+      - name: Build web (確認網頁版可建置)
+        run: flutter build web --release
