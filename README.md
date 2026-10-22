@@ -216,7 +216,7 @@ Windows：`文件\stock_portfolio.sqlite`。備份這個檔案＝備份全部。
 # 開發者
 
 ```bash
-flutter test        # 單元與 widget 測試（PR 會由 GitHub Actions 自動執行 analyze＋test）
+flutter test        # 單元與 widget 測試（PR 會由 GitHub Actions 自動執行 analyze＋test＋網頁建置）
 flutter analyze     # 靜態分析（零容忍）
 dart run tool/quote_probe.dart    # 驗證 Yahoo 端點在目前網路可用
 # UI 走查（iOS 模擬器四分頁截圖到 build/screenshots/）：
@@ -236,20 +236,39 @@ lib/
 └── ui/          # 分頁式介面、圖表元件（fl_chart）、深淺主題
 worker/          # Cloudflare Worker：網頁版的 Yahoo CORS 代理
 .github/workflows/release.yml  # 推 v* 標籤自動建置四平台安裝檔
+.github/workflows/test.yml     # PR：analyze＋測試＋網頁建置
+.github/workflows/deploy.yml   # 推送 master：測試通過後部署網頁版與 Worker
 ```
 
 UI 與底層完全分離：畫面只透過 `PortfolioRepository` 取資料；底層正確性由單元測試保證（計算引擎的期望值全部手工推導驗證）。注意：`lib/` 內禁止 import `drift/native`（dart:ffi 會使網頁版建置失敗），測試請用 `test/test_database.dart`。
+
+### 網頁版自動部署
+
+推送到 `master`（含合併 PR）時，GitHub Actions（`.github/workflows/deploy.yml`）會先跑 analyze＋測試，
+通過後自動建置網頁版部署到 Cloudflare Pages，並同時部署 `worker/` 的 Yahoo 代理，幾分鐘後線上版即更新。
+也可以在 GitHub 的 Actions 分頁手動執行 `deploy`。
+
+第一次需要設定兩個 Secret（repo 的 **Settings → Secrets and variables → Actions → New repository secret**）：
+
+| 名稱 | 取得方式 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare 後台右上頭像 → **My Profile → API Tokens → Create Token** → Create Custom Token，權限加入 **Account / Cloudflare Pages / Edit** 與 **Account / Workers Scripts / Edit** |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 後台 **Workers & Pages** 頁面右側的 Account ID |
+
+沒設定 Secret 時部署步驟會自動略過（只顯示警告），不會讓流程失敗。
 
 ### 部署自己的網頁版（fork 的人看這裡）
 
 網頁版需要一個 CORS 代理（瀏覽器不能直連 Yahoo）。用免費 Cloudflare 帳號：
 
 ```bash
-cd worker && npx wrangler deploy        # 部署代理，記下網址（更新 yahoo-proxy.js 後也要重新部署）
+cd worker && npx wrangler deploy        # 部署代理，記下網址
 # 把 lib/services/yahoo_endpoints.dart 的 WEB_PROXY_BASE 預設值改成你的 Worker 網址
 flutter build web --release
 npx wrangler pages deploy build/web --project-name=<你的專案名>
 ```
+
+之後想改用自動部署：把 `deploy.yml` 的 `PAGES_PROJECT_NAME` 改成你的專案名，再設定上面兩個 Secret。
 
 ### 發布新版本
 
