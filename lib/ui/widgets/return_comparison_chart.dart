@@ -3,6 +3,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import 'chart_axis_helper.dart';
+
 /// 一條報酬率曲線的資料。
 class ReturnSeriesEntry {
   final String label; // 圖例名稱（我的組合 / S&P 500 ...）
@@ -26,6 +28,8 @@ class ReturnSeriesEntry {
  * @brief   多條累計報酬率 % 折線圖（比較模式），Y 軸為 %，含 0% 基準線。
  */
 class ReturnComparisonChart extends StatelessWidget {
+  static const double LEFT_TITLE_WIDTH = 52; // 左側 Y 軸標籤保留寬度
+
   final List<int> dates; // yyyyMMdd 序列
   final List<ReturnSeriesEntry> series;
 
@@ -128,7 +132,7 @@ class ReturnComparisonChart extends StatelessWidget {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 52,
+                    reservedSize: LEFT_TITLE_WIDTH,
                     getTitlesWidget: (double value, TitleMeta meta) {
                       if (value == meta.max || value == meta.min) {
                         return const SizedBox.shrink();
@@ -141,27 +145,8 @@ class ReturnComparisonChart extends StatelessWidget {
                     },
                   ),
                 ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 28,
-                    interval: (dates.length / 4).ceilToDouble(),
-                    getTitlesWidget: (double value, TitleMeta meta) {
-                      final int index = value.toInt();
-                      if (index < 0 || index >= dates.length) {
-                        return const SizedBox.shrink();
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          FormatDateLabel(dates[index]),
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.grey),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                bottomTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               ),
               lineTouchData: LineTouchData(
                 touchTooltipData: LineTouchTooltipData(
@@ -185,16 +170,8 @@ class ReturnComparisonChart extends StatelessWidget {
             ),
           ),
         ),
+        DateAxisLabelRow(dates: dates, left_reserved: LEFT_TITLE_WIDTH),
       ],
     );
-  }
-
-  /// yyyyMMdd 整數轉「M/d」或跨年時「yy/M/d」標籤。
-  static String FormatDateLabel(int yyyymmdd) {
-    final int year = yyyymmdd ~/ 10000;
-    final int month = (yyyymmdd ~/ 100) % 100;
-    final int day = yyyymmdd % 100;
-    final int current_year = DateTime.now().year;
-    return year == current_year ? '$month/$day' : '${year % 100}/$month/$day';
   }
 }

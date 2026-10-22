@@ -1,10 +1,11 @@
-// 資產曲線圖：總市值與總成本兩條折線，X 軸為日期。
+// 資產曲線圖：總市值與總成本兩條折線，X 軸為日期，Y 軸依期間資料自動縮放。
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/portfolio_snapshot.dart';
 import '../money_format.dart';
+import 'chart_axis_helper.dart';
 
 /*
  * @author  Toby
@@ -18,6 +19,7 @@ import '../money_format.dart';
 class AssetCurveChart extends StatelessWidget {
   static const Color MARKET_VALUE_COLOR = Color(0xFF4F6DF5);
   static const Color COST_COLOR = Color(0xFF9CA3AF);
+  static const double LEFT_TITLE_WIDTH = 64; // 左側 Y 軸標籤保留寬度
 
   final List<PortfolioSnapshot> history;
   final String currency; // 序列已換算後的顯示幣別，供金額格式化
@@ -47,11 +49,22 @@ class AssetCurveChart extends StatelessWidget {
       cost_spots.add(FlSpot(i.toDouble(), history[i].total_cost_basis));
     }
 
-    final double max_y = history
-        .map((PortfolioSnapshot s) => s.total_market_value > s.total_cost_basis
-            ? s.total_market_value
-            : s.total_cost_basis)
-        .reduce((double a, double b) => a > b ? a : b);
+    double data_min = double.infinity;
+    double data_max = double.negativeInfinity;
+    for (final PortfolioSnapshot snapshot in history) {
+      for (final double value in <double>[
+        snapshot.total_market_value,
+        snapshot.total_cost_basis,
+      ]) {
+        if (value < data_min) {
+          data_min = value;
+        }
+        if (value > data_max) {
+          data_max = value;
+        }
+      }
+    }
+    final NiceAxisRange y_range = CalculateNiceAxisRange(data_min, data_max);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,8 +81,8 @@ class AssetCurveChart extends StatelessWidget {
           height: 260,
           child: LineChart(
             LineChartData(
-              minY: 0,
-              maxY: max_y * 1.08,
+              minY: y_range.min,
+              maxY: y_range.max,
               lineBarsData: <LineChartBarData>[
                 LineChartBarData(
                   spots: market_value_spots,
@@ -94,6 +107,7 @@ class AssetCurveChart extends StatelessWidget {
               gridData: FlGridData(
                 show: true,
                 drawVerticalLine: false,
+                horizontalInterval: y_range.interval,
                 getDrawingHorizontalLine: (double value) => FlLine(
                   color: Colors.grey.withValues(alpha: 0.15),
                   strokeWidth: 1,
@@ -108,40 +122,23 @@ class AssetCurveChart extends StatelessWidget {
                 leftTitles: AxisTitles(
                   sideTitles: SideTitles(
                     showTitles: true,
-                    reservedSize: 56,
+                    reservedSize: LEFT_TITLE_WIDTH,
+                    interval: y_range.interval,
                     getTitlesWidget: (double value, TitleMeta meta) {
-                      if (value == meta.max) {
-                        return const SizedBox.shrink();
-                      }
-                      return Text(
-                        FormatMoney(value, currency, compact: true),
-                        style:
-                            const TextStyle(fontSize: 11, color: Colors.grey),
-                      );
-                    },
-                  ),
-                ),
-                bottomTitles: AxisTitles(
-                  sideTitles: SideTitles(
-                    showTitles: true,
-                    reservedSize: 28,
-                    interval: (history.length / 4).ceilToDouble(),
-                    getTitlesWidget: (double value, TitleMeta meta) {
-                      final int index = value.toInt();
-                      if (index < 0 || index >= history.length) {
-                        return const SizedBox.shrink();
-                      }
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 6),
+                      return SideTitleWidget(
+                        meta: meta,
+                        fitInside: SideTitleFitInsideData.fromTitleMeta(meta),
                         child: Text(
-                          FormatDateLabel(history[index].date),
-                          style: const TextStyle(
-                              fontSize: 11, color: Colors.grey),
+                          FormatAxisMoney(value, y_range, currency),
+                          style:
+                              const TextStyle(fontSize: 11, color: Colors.grey),
                         ),
                       );
                     },
                   ),
                 ),
+                bottomTitles:
+                    const AxisTitles(sideTitles: SideTitles(showTitles: false)),
               ),
               lineTouchData: LineTouchData(
                 touchTooltipData: LineTouchTooltipData(
@@ -164,6 +161,10 @@ class AssetCurveChart extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        DateAxisLabelRow(
+          dates: <int>[for (final PortfolioSnapshot s in history) s.date],
+          left_reserved: LEFT_TITLE_WIDTH,
         ),
       ],
     );
